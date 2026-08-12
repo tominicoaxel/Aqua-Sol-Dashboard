@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* ── Identidad Pileta ─────────────────────────────────────────────────────
+   Dos niveles de color a propósito:
+   · "marca"  → los colores vivos del brief. Se usan en fills, puntos y barras.
+   · "tinta"  → variantes oscuras verificadas contra el fondo Espuma (>= 4.5:1),
+                para cuando el color tiene que ir en TEXTO y seguir legible.
+   Los vivos no llegan a 3:1 sobre Espuma, así que nunca cargan información solos:
+   siempre van con etiqueta escrita al lado.
+   ------------------------------------------------------------------------ */
+@theme {
+  --color-agua: #0b4f6c;
+  --color-agua-hondo: #083a50;
+  --color-agua-claro: #17698a;
+  --color-cloro: #2ec4b6;
+  --color-cloro-tinta: #16776e;
+  --color-sol: #f2a541;
+  --color-sol-tinta: #8a5510;
+  --color-espuma: #f5fafa;
+  --color-profundidad: #0d2b33;
+
+  --color-exito: #4ca771;
+  --color-exito-tinta: #276b47;
+  --color-alerta: #f2a541;
+  --color-alerta-tinta: #8a5510;
+  --color-error: #e15554;
+  --color-error-tinta: #a32b29;
+
+  --color-tinta: #0d2b33;
+  --color-tinta-2: #3a5a64;
+  --color-tinta-3: #4a6c76;
+  --color-tinta-4: #64828b;
+  --color-borde: #dce8ea;
+  --color-borde-suave: #e9f1f2;
+
+  /* Salida con peso: arranca rápido y frena despacio, como algo que tiene masa.
+     La curva por defecto de Tailwind (ease) es simétrica y se siente de plástico. */
+  --ease-suave: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Sombras tintadas con el azul del agua, no negro genérico: una sombra negra
+     sobre un fondo con matiz frío se ve gris sucio. Ésta pertenece a la paleta. */
+  --shadow-agua: 0 1px 2px rgba(11, 79, 108, 0.05), 0 2px 8px -2px rgba(11, 79, 108, 0.08);
+  --shadow-agua-lg: 0 2px 4px rgba(11, 79, 108, 0.05), 0 12px 28px -8px rgba(11, 79, 108, 0.18);
+
+  --font-titulo: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-cuerpo: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-dato: "JetBrains Mono", "Cascadia Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background-color: var(--color-espuma);
+    color: var(--color-tinta);
+    font-family: var(--font-cuerpo);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-titulo);
+    letter-spacing: -0.015em;
+    /* Evita la palabra huérfana sola en el último renglón de un título. */
+    text-wrap: balance;
+  }
+  h1 {
+    letter-spacing: -0.03em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* Los datos duros (fechas, cupos, montos, teléfonos) van en mono y con cifras
+     de ancho fijo: es lo que hace que la columna se escanee de un vistazo. */
+  .dato {
+    font-family: var(--font-dato);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-cloro-tinta);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes aparecer {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes subir {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes entrar-derecha {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* Como utilidades de Tailwind, para poder escribir `sm:anim-entrar`. */
+@utility anim-aparecer { animation: aparecer 0.18s ease-out both; }
+@utility anim-subir    { animation: subir 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@utility anim-entrar   { animation: entrar-derecha 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }

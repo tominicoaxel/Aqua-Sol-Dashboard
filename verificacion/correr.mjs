@@ -1,0 +1,354 @@
+import { createServer } from 'vite'
+
+const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
+let fallas = 0
+const ok = (cond, texto) => {
+  console.log(`  ${cond ? 'ok  ' : 'FALLA'}  ${texto}`)
+  if (!cond) fallas++
+}
+
+try {
+  const m = await vite.ssrLoadModule('/verificacion/escenarios.jsx')
+
+  console.log('\n── 1. Render de todas las pantallas ─────────────────────────')
+  const r = m.render()
+  ok(r.app > 5000, `App entera renderiza (${r.app} bytes)`)
+  ok(r.importador > 1000, `el importador renderiza (${r.importador} bytes)`)
+  ok(r.login > 1000, `la pantalla de login renderiza (${r.login} bytes)`)
+  ok(r.fichas > 0, `las 20 fichas de cliente renderizan (${r.fichas} bytes)`)
+  ok(r.clases > 0, `los 23 detalles de clase renderizan (${r.clases} bytes)`)
+
+  // Integridad: ningún participante apunta a un cliente que no existe, ninguna
+  // clase repite a la misma persona, y el cupo ocupado coincide con la lista real.
+  const integridad = (crudos, etiqueta) => {
+    const { clientes, horarios } = m.derivar(crudos)
+    const ids = new Set(clientes.map((c) => c.id))
+    let huerfanos = 0
+    let duplicados = 0
+    let descuadres = 0
+    for (const h of horarios) {
+      for (const p of h.participantes) if (!ids.has(p)) huerfanos++
+      if (new Set(h.participantes).size !== h.participantes.length) duplicados++
+      if (h.ocupados !== h.grupo.length) descuadres++
+    }
+    ok(huerfanos === 0, `${etiqueta}: sin participantes que apunten a un cliente inexistente`)
+    ok(duplicados === 0, `${etiqueta}: nadie repetido dentro de una misma clase`)
+    ok(descuadres === 0, `${etiqueta}: el cupo ocupado coincide con la lista de gente`)
+    return { clientes, horarios }
+  }
+
+  console.log('\n── 2. Estado de partida ─────────────────────────────────────')
+  let datos = m.datosDeEjemplo()
+  integridad(datos, 'ejemplo')
+
+  console.log('\n── 3. Agregar a una clase se ve en la ficha del cliente ─────')
+  {
+    const { horarios } = m.derivar(datos)
+    const clase = horarios.find((h) => !h.lleno)
+    const { clientes } = m.derivar(datos)
+    const forastero = clientes.find((c) => !clase.participantes.includes(c.id))
+    const antes = clase.ocupados
+
+    datos = m.conParticipanteAgregado(datos, clase.id, forastero.id)
+    const d = integridad(datos, 'tras agregar')
+    const claseDespues = d.horarios.find((h) => h.id === clase.id)
+    ok(claseDespues.ocupados === antes + 1, `el cupo pasó de ${antes} a ${claseDespues.ocupados}`)
+    const susClases = m.horariosDeCliente(d.horarios, forastero.id)
+    ok(
+      susClases.some((h) => h.id === clase.id),
+      `la clase aparece en la ficha de ${forastero.nombre} (el otro lado del cruce)`,
+    )
+    // Agregar dos veces no lo duplica
+    const repetido = m.conParticipanteAgregado(datos, clase.id, forastero.id)
+    const cl2 = m.derivar(repetido).horarios.find((h) => h.id === clase.id)
+    ok(cl2.ocupados === claseDespues.ocupados, 'agregar dos veces a la misma persona no la duplica')
+  }
+
+  console.log('\n── 4. Sacar de una clase desaparece de los dos lados ────────')
+  {
+    const { horarios } = m.derivar(datos)
+    const clase = horarios.find((h) => h.ocupados > 0)
+    const quien = clase.grupo[0]
+    const antes = clase.ocupados
+
+    datos = m.conParticipanteSacado(datos, clase.id, quien.id)
+    const d = integridad(datos, 'tras sacar')
+    const claseDespues = d.horarios.find((h) => h.id === clase.id)
+    ok(claseDespues.ocupados === antes - 1, `el cupo pasó de ${antes} a ${claseDespues.ocupados}`)
+    ok(!claseDespues.participantes.includes(quien.id), `${quien.nombre} ya no está en la lista`)
+    ok(
+      !m.horariosDeCliente(d.horarios, quien.id).some((h) => h.id === clase.id),
+      'la clase tampoco aparece ya en su ficha',
+    )
+    ok(
+      d.clientes.some((c) => c.id === quien.id),
+      'sigue siendo cliente: sacarlo de una clase no lo borra del sistema',
+    )
+  }
+
+  console.log('\n── 5. Se puede pasar del cupo, con aviso ────────────────────')
+  {
+    let sobre = datos
+    const clase = m.derivar(sobre).horarios.find((h) => h.lleno)
+    const fuera = m.derivar(sobre).clientes.find((c) => !clase.participantes.includes(c.id))
+    sobre = m.conParticipanteAgregado(sobre, clase.id, fuera.id)
+    const d = m.derivar(sobre).horarios.find((h) => h.id === clase.id)
+    ok(d.ocupados === clase.cupo + 1, `clase llena ${clase.cupo}/${clase.cupo} admite uno más (${d.ocupados}/${d.cupo})`)
+    ok(d.lleno === true, 'y sigue marcada como completa')
+  }
+
+  console.log('\n── 6. Registrar un pago ─────────────────────────────────────')
+  {
+    const vencido = m.derivar(datos).clientes.find((c) => c.estado === 'vencido')
+    const historialAntes = vencido.historial.length
+    const hoy = m.isoDeHoy()
+    const vence = m.vencimientoPara(hoy)
+
+    datos = m.conPagoRegistrado(datos, vencido.id, {
+      fecha: hoy,
+      vencimiento: vence,
+      monto: vencido.cuota,
+      medio: 'Transferencia',
+    })
+    const d = integridad(datos, 'tras el pago')
+    const despues = d.clientes.find((c) => c.id === vencido.id)
+    ok(despues.estado === 'al-dia', `${vencido.nombre}: vencido -> ${despues.estado} (el color se recalcula solo)`)
+    ok(despues.fechaPago === hoy, `la fecha de pago quedó en hoy (${hoy})`)
+    ok(despues.fechaVencimiento === vence, `el vencimiento quedó un mes después (${vence})`)
+    ok(despues.historial.length === historialAntes + 1, 'el pago quedó asentado en el historial')
+    ok(despues.historial[0].monto === vencido.cuota, 'con el importe correcto y arriba de todo')
+  }
+
+  console.log('\n── 7. Corregir fechas a mano ────────────────────────────────')
+  {
+    const alDia = m.derivar(datos).clientes.find((c) => c.estado === 'al-dia')
+    const historialAntes = alDia.historialPagos.length
+    datos = m.conFechasEditadas(datos, alDia.id, {
+      fechaPago: '2026-01-10',
+      fechaVencimiento: '2026-02-10',
+    })
+    const d = integridad(datos, 'tras corregir fechas')
+    const despues = d.clientes.find((c) => c.id === alDia.id)
+    ok(despues.estado === 'vencido', `${alDia.nombre}: al-dia -> ${despues.estado} con una fecha vieja`)
+    ok(
+      despues.historialPagos.length === historialAntes,
+      'corregir fechas NO inventa un pago en el historial',
+    )
+  }
+
+  console.log('\n── 8. Ida y vuelta por localStorage ─────────────────────────')
+  {
+    const texto = JSON.stringify({ clientes: datos.clientes, horarios: datos.horarios })
+    const vuelta = JSON.parse(texto)
+    const d = integridad({ ...vuelta, editado: true }, 'tras guardar y releer')
+    const original = m.derivar(datos)
+    ok(d.clientes.length === original.clientes.length, 'vuelven los mismos clientes')
+    ok(
+      d.horarios.every((h, i) => h.ocupados === original.horarios[i].ocupados),
+      'vuelven los mismos cupos en todas las clases',
+    )
+    ok(texto.length < 500000, `lo guardado entra holgado en localStorage (${(texto.length / 1024).toFixed(1)} kB de ~5 MB)`)
+  }
+
+
+  console.log('')
+  console.log('── 9. Gestión de clases ─────────────────────────────────────')
+  {
+    const antes = m.derivar(datos).horarios.length
+    datos = m.conClaseCreada(datos, {
+      actividad: 'Aquagym Senior', dia: 3, hora: '15:00',
+      profe: 'Paula Ríos', cupo: 5, duracion: 45,
+    })
+    let d = integridad(datos, 'tras crear la clase')
+    ok(d.horarios.length === antes + 1, `la grilla pasó de ${antes} a ${d.horarios.length} clases`)
+    const nueva = d.horarios.find((h) => h.actividad === 'Aquagym Senior')
+    ok(Boolean(nueva) && nueva.ocupados === 0, 'la clase nueva arranca vacía')
+    ok(d.horarios.filter((h) => h.dia === 3).some((h) => h.id === nueva.id), 'aparece en la grilla del día que le tocó')
+
+    const conGente = m.derivar(datos).horarios.find((h) => h.ocupados >= 3)
+    datos = m.conClaseEditada(datos, conGente.id, { cupo: 1, actividad: 'Nombre cambiado' })
+    d = integridad(datos, 'tras editar la clase')
+    const editada = d.horarios.find((h) => h.id === conGente.id)
+    ok(editada.actividad === 'Nombre cambiado', 'el nombre se actualizó')
+    ok(editada.cupo === 1, 'el cupo bajó a 1')
+    ok(editada.ocupados === conGente.ocupados, `no echó a nadie: siguen los ${editada.ocupados} anotados`)
+    ok(editada.ocupados > editada.cupo, 'la clase queda por encima del cupo, avisando y sin bloquear')
+
+    const clientesAntes = d.clientes.length
+    const eranParticipantes = editada.participantes
+    datos = m.conClaseEliminada(datos, conGente.id)
+    d = integridad(datos, 'tras eliminar la clase')
+    ok(!d.horarios.some((h) => h.id === conGente.id), 'la clase ya no está en la grilla')
+    ok(d.clientes.length === clientesAntes, 'los clientes que iban siguen existiendo')
+    ok(
+      eranParticipantes.every((id) => !m.horariosDeCliente(d.horarios, id).some((h) => h.id === conGente.id)),
+      'y la clase tampoco aparece ya en ninguna de sus fichas',
+    )
+  }
+
+  console.log('')
+  console.log('── 10. Método de pago con su detalle ────────────────────────')
+  {
+    const cliente = m.derivar(datos).clientes[0]
+    const cuando = m.isoDeHoy()
+
+    const conTransferencia = m.conPagoRegistrado(datos, cliente.id, {
+      fecha: cuando, vencimiento: m.vencimientoPara(cuando), monto: 50000,
+      metodo: 'transferencia', cuenta: 'bbva-ser',
+    })
+    let pago = m.derivar(conTransferencia).clientes.find((c) => c.id === cliente.id).historial[0]
+    ok(pago.metodo === 'transferencia' && pago.cuenta === 'bbva-ser', 'la transferencia guarda a qué cuenta entró')
+    ok(m.descripcionPago(pago) === 'Transferencia — BBVA Ser', `se lee: "${m.descripcionPago(pago)}"`)
+    ok(pago.recibo === undefined, 'y no le queda colgado ningún número de recibo')
+
+    // A propósito se manda TAMBIÉN una cuenta, como si alguien hubiera elegido
+    // transferencia, después cambiado a efectivo y confirmado.
+    const conEfectivo = m.conPagoRegistrado(datos, cliente.id, {
+      fecha: cuando, vencimiento: m.vencimientoPara(cuando), monto: 50000,
+      metodo: 'efectivo', recibo: '0043', cuenta: 'bbva-ser',
+    })
+    pago = m.derivar(conEfectivo).clientes.find((c) => c.id === cliente.id).historial[0]
+    ok(pago.metodo === 'efectivo' && pago.recibo === '0043', 'el efectivo guarda el número de recibo')
+    ok(m.descripcionPago(pago) === 'Efectivo — Recibo 0043', `se lee: "${m.descripcionPago(pago)}"`)
+    ok(pago.cuenta === undefined, 'y descarta la cuenta del otro método: no queda ningún campo colgado')
+
+    datos = conEfectivo
+    integridad(datos, 'tras los pagos')
+  }
+
+  console.log('')
+  console.log('── 11. Cobrado del mes por destino ──────────────────────────')
+  {
+    const r = m.cobradoDelMes(m.derivar(datos).clientes)
+    const sumaTitulares = Object.values(r.porTitular).reduce((a, b) => a + b, 0)
+    ok(r.total === sumaTitulares + r.efectivo + r.otros, `el total (${r.total}) es la suma exacta de los destinos`)
+    ok(Object.values(r.porCuenta).reduce((a, b) => a + b, 0) === sumaTitulares, 'el detalle por cuenta cuadra con el total por titular')
+    ok(r.total > 0, `hay algo que mostrar: ${r.cantidad} pagos este mes`)
+    console.log(`     Moni ${r.porTitular.Moni.toLocaleString('es-AR')} · Sergio ${r.porTitular.Sergio.toLocaleString('es-AR')} · Efectivo ${r.efectivo.toLocaleString('es-AR')}`)
+    ok(m.CUENTAS.length === 6, 'están las seis cuentas: MP/NX/BBVA por cada titular')
+  }
+
+  console.log('')
+  console.log('── 12. La importación entra al store ────────────────────────')
+  {
+    const antes = m.derivar(datos).clientes.length
+    const importados = [
+      ...datos.clientes.map((c) => ({ ...c })),
+      { id: 9001, nombre: 'Persona Importada', telefono: '', plan: 'Sin plan', cuota: 0,
+        fechaAlta: m.isoDeHoy(), fechaPago: m.isoDeHoy(), fechaVencimiento: m.isoDeHoy(), historialPagos: [] },
+    ]
+    datos = m.conClientesReemplazados(datos, importados)
+    const d = integridad(datos, 'tras importar')
+    ok(d.clientes.length === antes + 1, `la lista pasó de ${antes} a ${d.clientes.length}`)
+    ok(d.clientes.some((c) => c.nombre === 'Persona Importada'), 'el cliente importado está en la lista')
+    ok(d.horarios.every((h) => h.ocupados === h.grupo.length), 'importar clientes no rompió ninguna clase existente')
+  }
+
+
+  console.log('')
+  console.log('── 13. Asistencia a clase ───────────────────────────────────')
+  {
+    const clase = m.derivar(datos).horarios.find((h) => h.ocupados >= 2)
+    const [uno, dos] = clase.grupo
+    const estaSemana = m.aISO(m.ocurrenciaMasReciente(clase.dia, 0))
+    const semanaPasada = m.aISO(m.ocurrenciaMasReciente(clase.dia, 1))
+
+    const leer = (d, fecha) => d.asistencias?.[clase.id]?.[fecha] ?? []
+
+    datos = m.conAsistenciaMarcada(datos, clase.id, estaSemana, uno.id, true)
+    ok(leer(datos, estaSemana).includes(uno.id), `${uno.nombre} queda marcado como presente el ${estaSemana}`)
+    ok(!leer(datos, estaSemana).includes(dos.id), `${dos.nombre}, que no se marcó, no figura: el que no está, no vino`)
+
+    // Marcar dos veces no duplica
+    datos = m.conAsistenciaMarcada(datos, clase.id, estaSemana, uno.id, true)
+    ok(leer(datos, estaSemana).filter((id) => id === uno.id).length === 1, 'marcar dos veces al mismo no lo duplica')
+
+    // La asistencia cuelga de la FECHA: otra semana es otra lista
+    datos = m.conAsistenciaMarcada(datos, clase.id, semanaPasada, dos.id, true)
+    ok(
+      leer(datos, semanaPasada).includes(dos.id) && !leer(datos, semanaPasada).includes(uno.id),
+      'la semana anterior lleva su propia lista, independiente de la de esta semana',
+    )
+    ok(leer(datos, estaSemana).includes(uno.id), 'y marcar una semana no pisa la otra')
+
+    // Desmarcar
+    datos = m.conAsistenciaMarcada(datos, clase.id, estaSemana, uno.id, false)
+    ok(!leer(datos, estaSemana).includes(uno.id), 'desmarcar lo saca de la lista del día')
+
+    integridad(datos, 'tras marcar asistencia')
+
+    // Sacar del grupo NO borra lo que ya vino: es un hecho pasado
+    datos = m.conAsistenciaMarcada(datos, clase.id, semanaPasada, uno.id, true)
+    datos = m.conParticipanteSacado(datos, clase.id, uno.id)
+    ok(
+      leer(datos, semanaPasada).includes(uno.id),
+      'sacar a alguien del grupo no borra las clases a las que ya había venido',
+    )
+
+    // Eliminar la clase sí se lleva su asistencia
+    const sinClase = m.conClaseEliminada(datos, clase.id)
+    ok(sinClase.asistencias[clase.id] === undefined, 'eliminar la clase se lleva su asistencia: no queda huérfana')
+
+    // Ida y vuelta por localStorage
+    const vuelta = JSON.parse(JSON.stringify({ asistencias: datos.asistencias }))
+    ok(
+      JSON.stringify(vuelta.asistencias) === JSON.stringify(datos.asistencias),
+      'la asistencia sobrevive el guardado y la relectura',
+    )
+  }
+
+  console.log('\n── 14. La puerta: login y mensajes de error ─────────────────')
+  {
+    const html = m.renderLogin()
+
+    ok(/type="password"/.test(html), 'el login pide contraseña')
+    // Case-insensitive: React 19 emite `autoComplete` tal cual, y el parser de HTML
+    // normaliza los nombres de atributo a minúsculas al leerlos. En el navegador
+    // llega como `autocomplete`.
+    ok(/autocomplete="username"/i.test(html), 'el campo de email se autocompleta desde el llavero')
+    ok(/autocomplete="current-password"/i.test(html), 'la contraseña se autocompleta desde el llavero')
+    ok(/inputmode="email"/i.test(html), 'el celular abre el teclado con arroba para el email')
+    ok(/Me olvidé la contraseña/.test(html), 'hay salida para quien no se acuerda la contraseña')
+
+    // Lo que NO tiene que estar: el registro público está deshabilitado en
+    // Supabase, así que un botón de "crear cuenta" solo llevaría a un rechazo.
+    ok(
+      !/crear cuenta|registrarme|registrate|sign ?up/i.test(html),
+      'NO hay pantalla ni link de registro',
+    )
+
+    // Los datos de la sesión no pueden filtrarse al HTML de la puerta.
+    ok(!/supabase\.co/i.test(html), 'la URL del proyecto no aparece en el login')
+
+    // Traducción de errores: ninguno puede llegar en inglés ni con jerga.
+    const credenciales = m.mensajeDeError({ message: 'Invalid login credentials' })
+    ok(
+      credenciales.texto === 'El email o la contraseña no coinciden.',
+      `"Invalid login credentials" se traduce ("${credenciales.texto}")`,
+    )
+    ok(Boolean(credenciales.ayuda), 'y además dice qué hacer')
+
+    const red = m.mensajeDeError({ message: 'TypeError: Failed to fetch' })
+    ok(red.texto === 'No se pudo llegar al servidor.', 'un error de red se lee como error de red')
+    ok(/señal/i.test(red.ayuda), 'y manda a revisar la señal, que es lo que falla al borde de la pileta')
+
+    const cerrado = m.mensajeDeError({ message: 'Signups not allowed for this instance' })
+    ok(cerrado.texto === 'El registro está cerrado.', 'el registro deshabilitado se explica en castellano')
+
+    // Un error que no conocemos no puede escupir jerga sola ni quedar mudo.
+    const raro = m.mensajeDeError({ message: 'PGRST301 jwt expired' })
+    ok(!/^PGRST/.test(raro.texto), 'un error desconocido no se muestra crudo como título')
+    ok(/PGRST301/.test(raro.ayuda), 'pero el detalle técnico no se pierde: queda en la ayuda')
+
+    ok(m.mensajeDeError(null) === null, 'sin error no se inventa ningún mensaje')
+  }
+
+  console.log(`\n${fallas === 0 ? 'TODO OK' : `${fallas} FALLA(S)`}\n`)
+  process.exitCode = fallas === 0 ? 0 : 1
+} catch (e) {
+  console.error('EXPLOTÓ:', e.message)
+  console.error(e.stack.split('\n').slice(0, 8).join('\n'))
+  process.exitCode = 1
+} finally {
+  await vite.close()
+}
