@@ -391,6 +391,10 @@ try {
 
   console.log('\n── 16. Docentes y asignación de clases ──────────────────────')
   {
+    const html = m.renderDocentes()
+    ok(/Titulares \d+/.test(html) && /Suplentes \d+/.test(html), 'la pantalla permite filtrar titulares y suplentes')
+    ok(/Gestionar clases/.test(html), 'cada docente ofrece gestionar sus clases a cargo')
+
     const docente = {
       id: 'doc-verificacion', nombre: 'Ana Suplente', telefono: '11 5555-5555',
       email: 'ana@example.com', rol: 'suplente',
@@ -402,6 +406,12 @@ try {
     ensayo = m.conClaseEditada(ensayo, clase.id, { docenteId: docente.id, profe: docente.nombre })
     let horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
     ok(horario.docenteId === docente.id && horario.profe === docente.nombre, 'la clase queda vinculada a la docente elegida')
+
+    ensayo = m.conClaseEditada(ensayo, clase.id, { docenteId: null, profe: '' })
+    horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
+    ok(horario.docenteId === null && /sin docente/i.test(horario.profe), 'también se puede quitar una clase sin eliminar el horario')
+
+    ensayo = m.conClaseEditada(ensayo, clase.id, { docenteId: docente.id, profe: docente.nombre })
 
     ensayo = m.conDocenteEditado(ensayo, docente.id, { ...docente, nombre: 'Ana Gómez' })
     horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)

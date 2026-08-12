@@ -83,6 +83,10 @@ export function renderLogin() {
   )
 }
 
+export function renderDocentes() {
+  return conProveedor(<DocentesPanel onAbrirClase={nada} />)
+}
+
 export function derivar(crudos) {
   const clientes = derivarClientes(crudos.clientes)
   const porId = new Map(clientes.map((c) => [c.id, c]))

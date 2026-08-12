@@ -68,7 +68,71 @@ function FormularioDocente({ docente, onConfirmar, onCancelar }) {
   )
 }
 
-function TarjetaDocente({ docente, onEditar, onEliminar, onCancelarEliminar, eliminando, onAbrirClase }) {
+function GestionClases({ docente, horarios, onAsignar, onQuitar, onCerrar }) {
+  const clases = [...horarios].sort((a, b) => a.dia - b.dia || a.hora.localeCompare(b.hora))
+
+  return (
+    <section className="anim-subir rounded-2xl border border-cloro/40 bg-white p-4" aria-labelledby="titulo-gestion-clases">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="titulo-gestion-clases" className="font-titulo text-base font-semibold text-tinta">
+            Clases de {docente.nombre}
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-tinta-3">
+            Podés asignar clases libres, quitarlas o transferirlas desde otro docente.
+            Crear o eliminar el horario completo se hace desde Horarios.
+          </p>
+        </div>
+        <Boton variante="secundario" onClick={onCerrar}>Cerrar</Boton>
+      </div>
+
+      {clases.length === 0 ? (
+        <p className="mt-4 rounded-xl border border-dashed border-borde p-4 text-sm text-tinta-3">
+          Todavía no hay clases creadas. Creá una desde Horarios y después asignala acá.
+        </p>
+      ) : (
+        <ul className="mt-4 divide-y divide-borde-suave overflow-hidden rounded-xl border border-borde">
+          {clases.map((clase) => {
+            const propia = clase.docenteId === docente.id
+            const asignadaAOtro = Boolean(clase.docenteId && !propia)
+            return (
+              <li key={clase.id} className="flex flex-wrap items-center gap-3 bg-white px-3 py-2.5">
+                <span className="dato w-12 shrink-0 text-sm font-medium text-agua">{clase.hora}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-tinta">{clase.actividad}</span>
+                  <span className="block text-[11px] capitalize text-tinta-3">
+                    {nombreDia(clase.dia)} · {propia ? 'A su cargo' : asignadaAOtro ? `A cargo de ${clase.profe}` : 'Sin docente'}
+                  </span>
+                </span>
+                {propia ? (
+                  <button
+                    type="button"
+                    onClick={() => onQuitar(clase)}
+                    className="min-h-11 rounded-lg px-3 text-xs font-medium text-error-tinta transition hover:bg-error/10"
+                    aria-label={`Quitar ${clase.actividad} de ${docente.nombre}`}
+                  >
+                    Quitar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onAsignar(clase)}
+                    className="min-h-11 rounded-lg px-3 text-xs font-medium text-cloro-tinta transition hover:bg-cloro/10"
+                    aria-label={`${asignadaAOtro ? 'Transferir' : 'Asignar'} ${clase.actividad} a ${docente.nombre}`}
+                  >
+                    {asignadaAOtro ? 'Transferir' : 'Asignar'}
+                  </button>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function TarjetaDocente({ docente, onEditar, onGestionar, onEliminar, onCancelarEliminar, eliminando, onAbrirClase }) {
   return (
     <li className="rounded-2xl border border-borde bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -93,7 +157,8 @@ function TarjetaDocente({ docente, onEditar, onEliminar, onCancelarEliminar, eli
           </div>
         </div>
         {!eliminando && (
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
+            <Boton variante="secundario" className="px-3" onClick={onGestionar}>Gestionar clases</Boton>
             <Boton variante="fantasma" className="px-3" onClick={onEditar}>Editar</Boton>
             <Boton variante="fantasma" className="px-3 text-error-tinta" onClick={onEliminar}>Eliminar</Boton>
           </div>
@@ -146,9 +211,11 @@ function TarjetaDocente({ docente, onEditar, onEliminar, onCancelarEliminar, eli
 }
 
 export default function DocentesPanel({ onAbrirClase }) {
-  const { docentes, crearDocente, editarDocente, eliminarDocente, avisar } = useDatos()
+  const { docentes, horarios, crearDocente, editarDocente, eliminarDocente, editarClase, avisar } = useDatos()
   const [formulario, setFormulario] = useState(null)
   const [eliminando, setEliminando] = useState(null)
+  const [gestionandoId, setGestionandoId] = useState(null)
+  const [filtro, setFiltro] = useState('todos')
 
   const guardar = (datos) => {
     if (formulario === 'nuevo') {
@@ -164,11 +231,30 @@ export default function DocentesPanel({ onAbrirClase }) {
   const confirmarEliminar = (docente) => {
     eliminarDocente(docente.id)
     setEliminando(null)
+    if (gestionandoId === docente.id) setGestionandoId(null)
     avisar(`Eliminaste a ${docente.nombre}.`)
+  }
+
+  const docenteGestionando = docentes.find((d) => d.id === gestionandoId) ?? null
+
+  const asignarClase = (clase) => {
+    const anterior = clase.docenteId ? docentes.find((d) => d.id === clase.docenteId) : null
+    editarClase(clase.id, { docenteId: docenteGestionando.id, profe: docenteGestionando.nombre })
+    avisar(
+      anterior
+        ? `${clase.actividad} pasó de ${anterior.nombre} a ${docenteGestionando.nombre}.`
+        : `Asignaste ${clase.actividad} a ${docenteGestionando.nombre}.`,
+    )
+  }
+
+  const quitarClase = (clase) => {
+    editarClase(clase.id, { docenteId: null, profe: '' })
+    avisar(`Quitaste ${clase.actividad} de ${docenteGestionando.nombre}. La clase quedó sin docente.`)
   }
 
   const titulares = docentes.filter((d) => d.rol === 'titular').length
   const suplentes = docentes.filter((d) => d.rol === 'suplente').length
+  const visibles = filtro === 'todos' ? docentes : docentes.filter((d) => d.rol === filtro)
 
   return (
     <div className="space-y-5">
@@ -180,9 +266,26 @@ export default function DocentesPanel({ onAbrirClase }) {
         {!formulario && <Boton variante="primario" onClick={() => setFormulario('nuevo')}>Nuevo docente</Boton>}
       </header>
 
-      <div className="flex gap-3 text-xs text-tinta-3">
-        <span><span className="dato font-bold text-agua">{titulares}</span> titulares</span>
-        <span><span className="dato font-bold text-agua">{suplentes}</span> suplentes</span>
+      <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar docentes">
+        {[
+          ['todos', `Todos ${docentes.length}`],
+          ['titular', `Titulares ${titulares}`],
+          ['suplente', `Suplentes ${suplentes}`],
+        ].map(([id, etiqueta]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={filtro === id}
+            onClick={() => setFiltro(id)}
+            className={`min-h-11 shrink-0 rounded-xl border px-3 text-xs font-medium transition ${
+              filtro === id
+                ? 'border-agua bg-agua text-white'
+                : 'border-borde bg-white text-tinta-2 hover:border-cloro/60'
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
       </div>
 
       {formulario && (
@@ -194,18 +297,36 @@ export default function DocentesPanel({ onAbrirClase }) {
         />
       )}
 
-      {docentes.length === 0 ? (
+      {docenteGestionando && (
+        <GestionClases
+          key={docenteGestionando.id}
+          docente={docenteGestionando}
+          horarios={horarios}
+          onAsignar={asignarClase}
+          onQuitar={quitarClase}
+          onCerrar={() => setGestionandoId(null)}
+        />
+      )}
+
+      {visibles.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-borde bg-white/60 p-8 text-center">
-          <h2 className="font-titulo text-base font-semibold text-tinta">Todavía no hay docentes</h2>
-          <p className="mt-1 text-sm text-tinta-3">Cargá titulares y suplentes para poder asignarlos a las clases.</p>
+          <h2 className="font-titulo text-base font-semibold text-tinta">
+            {docentes.length === 0 ? 'Todavía no hay docentes' : 'No hay docentes en este filtro'}
+          </h2>
+          <p className="mt-1 text-sm text-tinta-3">
+            {docentes.length === 0
+              ? 'Cargá titulares y suplentes para poder asignarlos a las clases.'
+              : 'Probá con Todos o agregá un docente con esa función.'}
+          </p>
         </div>
       ) : (
         <ul className="space-y-3">
-          {docentes.map((docente) => (
+          {visibles.map((docente) => (
             <TarjetaDocente
               key={docente.id}
               docente={docente}
               onEditar={() => setFormulario(docente)}
+              onGestionar={() => setGestionandoId(docente.id)}
               eliminando={eliminando === docente.id}
               onEliminar={() => eliminando === docente.id ? confirmarEliminar(docente) : setEliminando(docente.id)}
               onCancelarEliminar={() => setEliminando(null)}
