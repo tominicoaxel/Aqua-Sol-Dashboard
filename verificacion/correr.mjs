@@ -17,6 +17,8 @@ try {
   ok(r.login > 1000, `la pantalla de login renderiza (${r.login} bytes)`)
   ok(r.fichas > 0, `las 20 fichas de cliente renderizan (${r.fichas} bytes)`)
   ok(r.clases > 0, `los 23 detalles de clase renderizan (${r.clases} bytes)`)
+  ok(r.docentes > 1000, `el panel de docentes renderiza (${r.docentes} bytes)`)
+  ok(r.espera > 1000, `la lista de espera renderiza (${r.espera} bytes)`)
 
   // Integridad: ningún participante apunta a un cliente que no existe, ninguna
   // clase repite a la misma persona, y el cupo ocupado coincide con la lista real.
@@ -24,16 +26,24 @@ try {
     const { clientes, horarios } = m.derivar(crudos)
     const ids = new Set(clientes.map((c) => c.id))
     let huerfanos = 0
+    let docentesHuerfanos = 0
+    let esperasHuerfanas = 0
     let duplicados = 0
     let descuadres = 0
     for (const h of horarios) {
       for (const p of h.participantes) if (!ids.has(p)) huerfanos++
       if (new Set(h.participantes).size !== h.participantes.length) duplicados++
       if (h.ocupados !== h.grupo.length) descuadres++
+      if (h.docenteId && !(crudos.docentes ?? []).some((d) => d.id === h.docenteId)) docentesHuerfanos++
+    }
+    for (const p of crudos.listaEspera ?? []) {
+      if (p.claseId && !crudos.horarios.some((h) => h.id === p.claseId)) esperasHuerfanas++
     }
     ok(huerfanos === 0, `${etiqueta}: sin participantes que apunten a un cliente inexistente`)
     ok(duplicados === 0, `${etiqueta}: nadie repetido dentro de una misma clase`)
     ok(descuadres === 0, `${etiqueta}: el cupo ocupado coincide con la lista de gente`)
+    ok(docentesHuerfanos === 0, `${etiqueta}: todas las clases apuntan a un docente existente`)
+    ok(esperasHuerfanas === 0, `${etiqueta}: la espera no apunta a clases inexistentes`)
     return { clientes, horarios }
   }
 
@@ -138,7 +148,13 @@ try {
 
   console.log('\n── 8. Ida y vuelta por localStorage ─────────────────────────')
   {
-    const texto = JSON.stringify({ clientes: datos.clientes, horarios: datos.horarios })
+    const texto = JSON.stringify({
+      clientes: datos.clientes,
+      horarios: datos.horarios,
+      docentes: datos.docentes,
+      listaEspera: datos.listaEspera,
+      asistencias: datos.asistencias,
+    })
     const vuelta = JSON.parse(texto)
     const d = integridad({ ...vuelta, editado: true }, 'tras guardar y releer')
     const original = m.derivar(datos)
@@ -157,7 +173,7 @@ try {
     const antes = m.derivar(datos).horarios.length
     datos = m.conClaseCreada(datos, {
       actividad: 'Aquagym Senior', dia: 3, hora: '15:00',
-      profe: 'Paula Ríos', cupo: 5, duracion: 45,
+      profe: datos.docentes[0].nombre, docenteId: datos.docentes[0].id, cupo: 5, duracion: 45,
     })
     let d = integridad(datos, 'tras crear la clase')
     ok(d.horarios.length === antes + 1, `la grilla pasó de ${antes} a ${d.horarios.length} clases`)
@@ -341,6 +357,80 @@ try {
     ok(/PGRST301/.test(raro.ayuda), 'pero el detalle técnico no se pierde: queda en la ayuda')
 
     ok(m.mensajeDeError(null) === null, 'sin error no se inventa ningún mensaje')
+  }
+
+  console.log('\n── 15. Corregir un pago existente ──────────────────────────')
+  {
+    const cliente = m.derivar(datos).clientes.find((c) => c.historial.length > 1)
+    const pago = cliente.historial[0]
+    const referencia = pago.fecha
+    const antes = m.cobradoDelMes(m.derivar(datos).clientes, referencia)
+    const montoNuevo = pago.monto + 750
+    const corregidos = m.conPagoEditado(
+      datos,
+      cliente.id,
+      pago.id,
+      {
+        fecha: m.aISO(pago.fecha),
+        monto: montoNuevo,
+        metodo: 'efectivo',
+        recibo: '9999',
+        vencimiento: cliente.fechaVencimiento,
+      },
+      true,
+    )
+    const despues = m.derivar(corregidos).clientes.find((c) => c.id === cliente.id)
+    const editado = despues.historial.find((p) => p.id === pago.id)
+    const resumen = m.cobradoDelMes(m.derivar(corregidos).clientes, referencia)
+    ok(despues.historial.length === cliente.historial.length, 'editar no duplica ni borra pagos')
+    ok(editado.monto === montoNuevo, 'el importe corregido queda en el mismo asiento')
+    ok(editado.metodo === 'efectivo' && editado.recibo === '9999', 'se puede corregir método y recibo')
+    ok(editado.cuenta === undefined, 'al pasar a efectivo no queda una cuenta colgada')
+    ok(resumen.total === antes.total + 750, 'el resumen mensual refleja el importe corregido')
+  }
+
+  console.log('\n── 16. Docentes y asignación de clases ──────────────────────')
+  {
+    const docente = {
+      id: 'doc-verificacion', nombre: 'Ana Suplente', telefono: '11 5555-5555',
+      email: 'ana@example.com', rol: 'suplente',
+    }
+    let ensayo = m.conDocenteCreado(datos, docente)
+    ok(ensayo.docentes.some((d) => d.id === docente.id), 'se puede dar de alta una docente suplente')
+
+    const clase = ensayo.horarios[0]
+    ensayo = m.conClaseEditada(ensayo, clase.id, { docenteId: docente.id, profe: docente.nombre })
+    let horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
+    ok(horario.docenteId === docente.id && horario.profe === docente.nombre, 'la clase queda vinculada a la docente elegida')
+
+    ensayo = m.conDocenteEditado(ensayo, docente.id, { ...docente, nombre: 'Ana Gómez' })
+    horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
+    ok(horario.profe === 'Ana Gómez', 'renombrar a la docente se refleja en sus clases')
+
+    ensayo = m.conDocenteEliminado(ensayo, docente.id)
+    horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
+    ok(horario.docenteId === null && /sin docente/i.test(horario.profe), 'al eliminarla, la clase queda explícitamente sin asignar')
+  }
+
+  console.log('\n── 17. Gestión de la lista de espera ────────────────────────')
+  {
+    const clase = datos.horarios[0]
+    const persona = {
+      id: 'espera-verificacion', nombre: 'Persona en espera', telefono: '11 4444-4444',
+      claseId: clase.id, fechaSolicitud: '2026-08-12', estado: 'esperando', notas: '',
+    }
+    let ensayo = m.conPersonaEnEsperaCreada(datos, persona)
+    ok(ensayo.listaEspera.some((p) => p.id === persona.id && p.claseId === clase.id), 'el pedido guarda la clase y el horario elegidos')
+
+    ensayo = m.conPersonaEnEsperaEditada(ensayo, persona.id, { ...persona, estado: 'contactado', notas: 'Confirmar el viernes.' })
+    const editada = ensayo.listaEspera.find((p) => p.id === persona.id)
+    ok(editada.estado === 'contactado' && /viernes/.test(editada.notas), 'se pueden actualizar estado y notas')
+
+    const sinClase = m.conClaseEliminada(ensayo, clase.id)
+    ok(sinClase.listaEspera.find((p) => p.id === persona.id).claseId === null, 'si se elimina la clase, la persona no se pierde')
+
+    ensayo = m.conPersonaEnEsperaEliminada(ensayo, persona.id)
+    ok(!ensayo.listaEspera.some((p) => p.id === persona.id), 'se puede quitar a alguien de la lista')
   }
 
   console.log(`\n${fallas === 0 ? 'TODO OK' : `${fallas} FALLA(S)`}\n`)

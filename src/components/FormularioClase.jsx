@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { nombreDia } from '../lib/fechas.js'
+import { useDatos } from '../lib/store.jsx'
 import Boton from './Boton.jsx'
 import Campo from './Campo.jsx'
 
@@ -9,10 +10,11 @@ const DIAS = [1, 2, 3, 4, 5, 6]
  *  campos son idénticos y tener dos versiones sería tener dos lugares donde
  *  arreglar el mismo bug. */
 export default function FormularioClase({ clase, anotados = 0, titulo, onConfirmar, onCancelar }) {
+  const { docentes } = useDatos()
   const [actividad, setActividad] = useState(clase?.actividad ?? '')
   const [dia, setDia] = useState(clase?.dia ?? 1)
   const [hora, setHora] = useState(clase?.hora ?? '09:00')
-  const [profe, setProfe] = useState(clase?.profe ?? '')
+  const [docenteId, setDocenteId] = useState(clase?.docenteId ?? '')
   const [cupo, setCupo] = useState(String(clase?.cupo ?? 8))
   const [duracion, setDuracion] = useState(String(clase?.duracion ?? 45))
   const [tocado, setTocado] = useState(false)
@@ -21,7 +23,8 @@ export default function FormularioClase({ clase, anotados = 0, titulo, onConfirm
   const errorHora = /^\d{2}:\d{2}$/.test(hora) ? null : 'Elegí una hora.'
   const errorCupo = Number(cupo) >= 1 ? null : 'El cupo tiene que ser al menos 1.'
   const errorDuracion = Number(duracion) >= 5 ? null : 'La duración tiene que ser de 5 minutos o más.'
-  const invalido = Boolean(errorActividad || errorHora || errorCupo || errorDuracion)
+  const errorDocente = docenteId ? null : 'Elegí quién queda a cargo.'
+  const invalido = Boolean(errorActividad || errorHora || errorCupo || errorDuracion || errorDocente)
 
   // Bajar el cupo por debajo de los que ya están anotados avisa, pero no bloquea:
   // el mismo criterio que al sumar gente a una clase llena. Quién entra y quién no
@@ -35,11 +38,13 @@ export default function FormularioClase({ clase, anotados = 0, titulo, onConfirm
         e.preventDefault()
         setTocado(true)
         if (invalido) return
+        const docente = docentes.find((d) => d.id === docenteId)
         onConfirmar({
           actividad: actividad.trim(),
           dia: Number(dia),
           hora,
-          profe: profe.trim(),
+          docenteId,
+          profe: docente?.nombre ?? '',
           cupo: Number(cupo),
           duracion: Number(duracion),
         })
@@ -118,15 +123,25 @@ export default function FormularioClase({ clase, anotados = 0, titulo, onConfirm
         </Campo>
       </div>
 
-      <Campo etiqueta="Profesor/a" className="mt-3">
+      <Campo
+        etiqueta="Docente a cargo *"
+        ayuda={docentes.length === 0 ? 'Primero cargá un docente desde la sección Docentes.' : null}
+        error={tocado ? errorDocente : null}
+        className="mt-3"
+      >
         {(p) => (
-          <input
+          <select
             {...p}
-            type="text"
-            value={profe}
-            onChange={(e) => setProfe(e.target.value)}
-            placeholder="Quién la da"
-          />
+            value={docenteId}
+            onChange={(e) => setDocenteId(e.target.value)}
+          >
+            <option value="">Sin asignar</option>
+            {docentes.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.nombre} — {d.rol === 'suplente' ? 'Suplente' : 'Titular'}
+              </option>
+            ))}
+          </select>
         )}
       </Campo>
 

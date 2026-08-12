@@ -1,7 +1,8 @@
 # Dashboard Pileta
 
 Panel de gestión para una pileta privada. Permite administrar clientes, cuotas,
-clases, participantes y asistencias, e importar el padrón desde Excel o CSV.
+clases, docentes titulares y suplentes, lista de espera y asistencias, e importar
+el padrón desde Excel o CSV.
 
 Los datos viven en **Supabase** (Postgres + Auth) y están protegidos con RLS. La
 aplicación requiere iniciar sesión y no ofrece registro público.
@@ -100,6 +101,11 @@ silencio. En `ejemplos/` hay tres archivos de prueba.
 - Cada usuaria accede únicamente a sus filas mediante políticas RLS.
 - Los IDs se generan en el cliente para conservar las mutaciones puras de la app.
 - Los pagos, participantes y asistencias se guardan en Supabase.
+- Cada clase referencia a su docente a cargo; al migrar se conservan y convierten
+  automáticamente los nombres de profesores que ya existían.
+- La lista de espera conserva la persona aunque se elimine el horario solicitado.
+- Los pagos del historial se pueden corregir sin duplicar el asiento; si es el
+  último, también se sincronizan las fechas principales de la cuota.
 - El estado se actualiza de forma optimista y se revierte si falla la escritura.
 - El registro público permanece cerrado; no hay formulario de alta en la app.
 - Nunca se debe usar ni versionar una clave `service_role`.

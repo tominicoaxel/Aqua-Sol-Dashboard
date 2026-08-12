@@ -4,11 +4,14 @@ import ClienteFicha from '../src/components/ClienteFicha.jsx'
 import ClaseDetalle from '../src/components/ClaseDetalle.jsx'
 import ImportadorClientes from '../src/components/ImportadorClientes.jsx'
 import Login from '../src/components/Login.jsx'
+import DocentesPanel from '../src/components/DocentesPanel.jsx'
+import ListaEsperaPanel from '../src/components/ListaEsperaPanel.jsx'
 import { ProveedorSesion, mensajeDeError } from '../src/lib/sesion.jsx'
 import { datosDeEjemplo } from './semilla/index.js'
 import {
   ProveedorDatos,
   conPagoRegistrado,
+  conPagoEditado,
   conFechasEditadas,
   conParticipanteAgregado,
   conParticipanteSacado,
@@ -17,6 +20,12 @@ import {
   conClaseEliminada,
   conClientesReemplazados,
   conAsistenciaMarcada,
+  conDocenteCreado,
+  conDocenteEditado,
+  conDocenteEliminado,
+  conPersonaEnEsperaCreada,
+  conPersonaEnEsperaEditada,
+  conPersonaEnEsperaEliminada,
   vencimientoPara,
   isoDeHoy,
 } from '../src/lib/store.jsx'
@@ -47,6 +56,8 @@ export function render() {
     ).length,
     fichas: 0,
     clases: 0,
+    docentes: conProveedor(<DocentesPanel onAbrirClase={nada} />).length,
+    espera: conProveedor(<ListaEsperaPanel onAbrirClase={nada} />).length,
   }
   const { clientes, horarios } = derivar(datosDeEjemplo())
   for (const c of clientes) {
@@ -75,13 +86,15 @@ export function renderLogin() {
 export function derivar(crudos) {
   const clientes = derivarClientes(crudos.clientes)
   const porId = new Map(clientes.map((c) => [c.id, c]))
-  return { clientes, horarios: derivarHorarios(crudos.horarios, porId), porId }
+  const docentesPorId = new Map((crudos.docentes ?? []).map((d) => [d.id, d]))
+  return { clientes, horarios: derivarHorarios(crudos.horarios, porId, docentesPorId), porId }
 }
 
 export {
   mensajeDeError,
   datosDeEjemplo,
   conPagoRegistrado,
+  conPagoEditado,
   conFechasEditadas,
   conParticipanteAgregado,
   conParticipanteSacado,
@@ -90,6 +103,12 @@ export {
   conClaseEliminada,
   conClientesReemplazados,
   conAsistenciaMarcada,
+  conDocenteCreado,
+  conDocenteEditado,
+  conDocenteEliminado,
+  conPersonaEnEsperaCreada,
+  conPersonaEnEsperaEditada,
+  conPersonaEnEsperaEliminada,
   horariosDeCliente,
   vencimientoPara,
   isoDeHoy,

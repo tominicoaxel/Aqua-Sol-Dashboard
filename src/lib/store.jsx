@@ -14,7 +14,9 @@ import { crearPersistencia } from './persistencia.js'
 // SALE el estado y adónde SE GUARDA — no la lógica: las mutaciones de más abajo
 // siguen siendo las mismas funciones puras de siempre.
 
-const VACIO = { clientes: [], horarios: [], asistencias: {} }
+const VACIO = { clientes: [], horarios: [], asistencias: {}, docentes: [], listaEspera: [] }
+
+const nuevoId = () => globalThis.crypto.randomUUID()
 
 const DatosContext = createContext(null)
 
@@ -47,6 +49,47 @@ export function conPagoRegistrado(crudos, id, { fecha, monto, metodo, cuenta, re
           }
         : c,
     ),
+  }
+}
+
+/** Conserva intacta la mutación histórica de registrar y le suma el id que ya se
+ *  generó antes. Así el pago nuevo se puede corregir sin obligar a recargar la
+ *  ficha para recuperar el UUID que quedó en la base. */
+export function conPagoIdentificado(crudos, clienteId, pago) {
+  const registrados = conPagoRegistrado(crudos, clienteId, pago)
+  return {
+    ...registrados,
+    clientes: registrados.clientes.map((c) =>
+      c.id === clienteId
+        ? { ...c, historialPagos: [{ ...c.historialPagos[0], id: pago.id }, ...c.historialPagos.slice(1)] }
+        : c,
+    ),
+  }
+}
+
+/** Corrige un asiento existente. Solo si es el último pago también actualiza las
+ *  fechas principales de la ficha; editar un pago viejo no debe cambiar el estado
+ *  actual de la cuota. */
+export function conPagoEditado(crudos, clienteId, pagoId, cambios, actualizarFechas = false) {
+  const detalle =
+    cambios.metodo === 'transferencia'
+      ? { metodo: cambios.metodo, cuenta: cambios.cuenta }
+      : { metodo: cambios.metodo, ...(cambios.recibo ? { recibo: cambios.recibo } : {}) }
+
+  return {
+    ...crudos,
+    clientes: crudos.clientes.map((c) => {
+      if (c.id !== clienteId) return c
+      return {
+        ...c,
+        ...(actualizarFechas
+          ? { fechaPago: cambios.fecha, fechaVencimiento: cambios.vencimiento }
+          : {}),
+        historialPagos: c.historialPagos.map((p) =>
+          p.id === pagoId ? { id: p.id, fecha: cambios.fecha, monto: cambios.monto, ...detalle } : p,
+        ),
+      }
+    }),
   }
 }
 
@@ -135,6 +178,9 @@ export function conClaseEliminada(crudos, id) {
     ...crudos,
     horarios: crudos.horarios.filter((h) => h.id !== id),
     asistencias,
+    listaEspera: (crudos.listaEspera ?? []).map((p) =>
+      p.claseId === id ? { ...p, claseId: null } : p,
+    ),
   }
 }
 
@@ -144,6 +190,47 @@ export function conClaseEliminada(crudos, id) {
  *  la vista previa es exactamente lo que queda. */
 export function conClientesReemplazados(crudos, clientes) {
   return { ...crudos, clientes }
+}
+
+export function conDocenteCreado(crudos, docente) {
+  return { ...crudos, docentes: [...(crudos.docentes ?? []), docente] }
+}
+
+export function conDocenteEditado(crudos, id, cambios) {
+  const docentes = (crudos.docentes ?? []).map((d) => (d.id === id ? { ...d, ...cambios } : d))
+  const actualizado = docentes.find((d) => d.id === id)
+  return {
+    ...crudos,
+    docentes,
+    horarios: crudos.horarios.map((h) =>
+      h.docenteId === id ? { ...h, profe: actualizado?.nombre ?? h.profe } : h,
+    ),
+  }
+}
+
+export function conDocenteEliminado(crudos, id) {
+  return {
+    ...crudos,
+    docentes: (crudos.docentes ?? []).filter((d) => d.id !== id),
+    horarios: crudos.horarios.map((h) =>
+      h.docenteId === id ? { ...h, docenteId: null, profe: '' } : h,
+    ),
+  }
+}
+
+export function conPersonaEnEsperaCreada(crudos, persona) {
+  return { ...crudos, listaEspera: [...(crudos.listaEspera ?? []), persona] }
+}
+
+export function conPersonaEnEsperaEditada(crudos, id, cambios) {
+  return {
+    ...crudos,
+    listaEspera: (crudos.listaEspera ?? []).map((p) => (p.id === id ? { ...p, ...cambios } : p)),
+  }
+}
+
+export function conPersonaEnEsperaEliminada(crudos, id) {
+  return { ...crudos, listaEspera: (crudos.listaEspera ?? []).filter((p) => p.id !== id) }
 }
 
 export function ProveedorDatos({ children, datosIniciales = null }) {
@@ -230,10 +317,25 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
 
   const acciones = useMemo(
     () => ({
-      registrarPago: (id, datos) =>
+      registrarPago: (id, datos) => {
+        const completos = { ...datos, id: nuevoId() }
+        return aplicar(
+          (prev) => conPagoIdentificado(prev, id, completos),
+          () => db.registrarPago(id, completos),
+        )
+      },
+      editarPago: (clienteId, pagoId, cambios, actualizarFechas) =>
         aplicar(
-          (prev) => conPagoRegistrado(prev, id, datos),
-          () => db.registrarPago(id, datos),
+          (prev) => conPagoEditado(prev, clienteId, pagoId, cambios, actualizarFechas),
+          (_nuevo, anterior) => {
+            const cliente = anterior.clientes.find((c) => c.id === clienteId)
+            const pago = cliente?.historialPagos.find((p) => p.id === pagoId)
+            return db.editarPago(clienteId, pagoId, cambios, actualizarFechas, {
+              pago,
+              fechaPago: cliente?.fechaPago,
+              fechaVencimiento: cliente?.fechaVencimiento,
+            })
+          },
         ),
       editarFechas: (id, datos) =>
         aplicar(
@@ -277,6 +379,40 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
           (prev) => conClientesReemplazados(prev, clientes),
           () => db.guardarClientes(clientes),
         ),
+      crearDocente: (datos) => {
+        const docente = { id: nuevoId(), ...datos }
+        return aplicar(
+          (prev) => conDocenteCreado(prev, docente),
+          () => db.crearDocente(docente),
+        )
+      },
+      editarDocente: (id, cambios) =>
+        aplicar(
+          (prev) => conDocenteEditado(prev, id, cambios),
+          () => db.editarDocente(id, cambios),
+        ),
+      eliminarDocente: (id) =>
+        aplicar(
+          (prev) => conDocenteEliminado(prev, id),
+          () => db.eliminarDocente(id),
+        ),
+      crearEnEspera: (datos) => {
+        const persona = { id: nuevoId(), ...datos }
+        return aplicar(
+          (prev) => conPersonaEnEsperaCreada(prev, persona),
+          () => db.crearEnEspera(persona),
+        )
+      },
+      editarEnEspera: (id, cambios) =>
+        aplicar(
+          (prev) => conPersonaEnEsperaEditada(prev, id, cambios),
+          () => db.editarEnEspera(id, cambios),
+        ),
+      eliminarDeEspera: (id) =>
+        aplicar(
+          (prev) => conPersonaEnEsperaEliminada(prev, id),
+          () => db.eliminarDeEspera(id),
+        ),
     }),
     [aplicar, db],
   )
@@ -284,10 +420,20 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
   const valor = useMemo(() => {
     const clientes = derivarClientes(crudos.clientes)
     const porId = new Map(clientes.map((c) => [c.id, c]))
-    const horarios = derivarHorarios(crudos.horarios, porId)
+    const docentesCrudos = crudos.docentes ?? []
+    const docentesPorId = new Map(docentesCrudos.map((d) => [d.id, d]))
+    const horarios = derivarHorarios(crudos.horarios, porId, docentesPorId)
+    const docentes = docentesCrudos
+      .map((d) => ({ ...d, clases: horarios.filter((h) => h.docenteId === d.id) }))
+      .sort((a, b) => a.rol.localeCompare(b.rol) || a.nombre.localeCompare(b.nombre, 'es'))
+    const listaEspera = (crudos.listaEspera ?? [])
+      .map((p) => ({ ...p, clase: horarios.find((h) => h.id === p.claseId) ?? null }))
+      .sort((a, b) => a.fechaSolicitud.localeCompare(b.fechaSolicitud))
     return {
       clientes,
       horarios,
+      docentes,
+      listaEspera,
       // El importador trabaja contra la forma cruda, que es la que se guarda.
       clientesCrudos: crudos.clientes,
       asistencias: crudos.asistencias ?? {},

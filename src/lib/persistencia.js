@@ -4,6 +4,8 @@ import {
   cambiosDeClase,
   filaDesdeClase,
   filaDesdeCliente,
+  filaDesdeDocente,
+  filaDesdeEspera,
   filaDesdePago,
 } from './mapeo.js'
 
@@ -28,14 +30,16 @@ export function crearPersistencia(usuarioId) {
   // Las cinco tablas en paralelo: son consultas chicas e independientes, y en
   // serie el arranque tardaría cinco viajes en vez de uno.
   async function cargarTodo() {
-    const [clientes, clases, participantes, pagos, asistencias] = await Promise.all([
+    const [clientes, clases, participantes, pagos, asistencias, docentes, listaEspera] = await Promise.all([
       supabase.from('clientes').select('*').order('nombre').then(oExplota),
       supabase.from('clases').select('*').order('dia').order('hora').then(oExplota),
       supabase.from('participantes').select('*').then(oExplota),
       supabase.from('pagos').select('*').order('fecha', { ascending: false }).then(oExplota),
       supabase.from('asistencias').select('*').then(oExplota),
+      supabase.from('docentes').select('*').order('rol').order('nombre').then(oExplota),
+      supabase.from('lista_espera').select('*').order('fecha_solicitud').then(oExplota),
     ])
-    return armarCrudos({ clientes, clases, participantes, pagos, asistencias })
+    return armarCrudos({ clientes, clases, participantes, pagos, asistencias, docentes, listaEspera })
   }
 
   // ── Pagos ────────────────────────────────────────────────────────────────
@@ -43,10 +47,10 @@ export function crearPersistencia(usuarioId) {
    *  cliente. Postgres no las hace atómicas desde el cliente, así que si la
    *  segunda falla se deshace la primera a mano. Sin esa compensación quedaría un
    *  pago cobrado que la ficha no refleja — el peor de los dos estados posibles. */
-  async function registrarPago(clienteId, { fecha, monto, metodo, cuenta, recibo, vencimiento }) {
+  async function registrarPago(clienteId, { id, fecha, monto, metodo, cuenta, recibo, vencimiento }) {
     const insertado = await supabase
       .from('pagos')
-      .insert({ usuario_id: usuarioId, ...filaDesdePago(clienteId, { fecha, monto, metodo, cuenta, recibo }) })
+      .insert({ usuario_id: usuarioId, ...filaDesdePago(clienteId, { id, fecha, monto, metodo, cuenta, recibo }) })
       .select('id')
       .single()
       .then(oExplota)
@@ -59,6 +63,38 @@ export function crearPersistencia(usuarioId) {
         .then(oExplota)
     } catch (e) {
       await supabase.from('pagos').delete().eq('id', insertado.id)
+      throw e
+    }
+  }
+
+  /** Corregir el último pago también mueve las fechas visibles de la ficha. Son
+   *  dos escrituras, así que si falla la segunda se devuelve el asiento a su valor
+   *  anterior para no dejar el resumen contradiciendo al historial. */
+  async function editarPago(clienteId, pagoId, cambios, actualizarFechas, anterior) {
+    const filaNueva = filaDesdePago(clienteId, { id: pagoId, ...cambios })
+    delete filaNueva.id
+
+    await supabase
+      .from('pagos')
+      .update(filaNueva)
+      .eq('id', pagoId)
+      .eq('cliente_id', clienteId)
+      .select('id')
+      .single()
+      .then(oExplota)
+
+    if (!actualizarFechas) return
+
+    try {
+      await supabase
+        .from('clientes')
+        .update({ fecha_ultimo_pago: cambios.fecha, fecha_vencimiento: cambios.vencimiento })
+        .eq('id', clienteId)
+        .then(oExplota)
+    } catch (e) {
+      const filaAnterior = filaDesdePago(clienteId, anterior.pago)
+      delete filaAnterior.id
+      await supabase.from('pagos').update(filaAnterior).eq('id', pagoId)
       throw e
     }
   }
@@ -111,6 +147,42 @@ export function crearPersistencia(usuarioId) {
     await supabase.from('clases').delete().eq('id', id).then(oExplota)
   }
 
+  // ── Docentes ────────────────────────────────────────────────────────────
+  async function crearDocente(docente) {
+    await supabase
+      .from('docentes')
+      .insert({ usuario_id: usuarioId, ...filaDesdeDocente(docente) })
+      .then(oExplota)
+  }
+
+  async function editarDocente(id, cambios) {
+    const fila = filaDesdeDocente({ id, ...cambios })
+    delete fila.id
+    await supabase.from('docentes').update(fila).eq('id', id).then(oExplota)
+  }
+
+  async function eliminarDocente(id) {
+    await supabase.from('docentes').delete().eq('id', id).then(oExplota)
+  }
+
+  // ── Lista de espera ─────────────────────────────────────────────────────
+  async function crearEnEspera(persona) {
+    await supabase
+      .from('lista_espera')
+      .insert({ usuario_id: usuarioId, ...filaDesdeEspera(persona) })
+      .then(oExplota)
+  }
+
+  async function editarEnEspera(id, cambios) {
+    const fila = filaDesdeEspera({ id, ...cambios })
+    delete fila.id
+    await supabase.from('lista_espera').update(fila).eq('id', id).then(oExplota)
+  }
+
+  async function eliminarDeEspera(id) {
+    await supabase.from('lista_espera').delete().eq('id', id).then(oExplota)
+  }
+
   // ── Asistencia ───────────────────────────────────────────────────────────
   /** Se guarda solo a quien vino: marcar es insertar, desmarcar es borrar. No hay
    *  fila que diga "faltó" — el que no está, no vino. */
@@ -155,12 +227,19 @@ export function crearPersistencia(usuarioId) {
   return {
     cargarTodo,
     registrarPago,
+    editarPago,
     editarFechas,
     agregarParticipante,
     sacarParticipante,
     crearClase,
     editarClase,
     eliminarClase,
+    crearDocente,
+    editarDocente,
+    eliminarDocente,
+    crearEnEspera,
+    editarEnEspera,
+    eliminarDeEspera,
     marcarAsistencia,
     guardarClientes,
   }

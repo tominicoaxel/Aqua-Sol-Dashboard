@@ -66,6 +66,7 @@ export function filaDesdeCliente(cliente) {
  *  transferencia contradiría al método. */
 export function pagoDesdeFila(fila) {
   return {
+    id: fila.id,
     fecha: fila.fecha,
     monto: Number(fila.importe),
     metodo: fila.metodo,
@@ -77,12 +78,62 @@ export function pagoDesdeFila(fila) {
 export function filaDesdePago(clienteId, pago) {
   const esTransferencia = pago.metodo === 'transferencia'
   return {
+    ...(pago.id ? { id: pago.id } : {}),
     cliente_id: clienteId,
     fecha: pago.fecha,
     importe: pago.monto,
     metodo: pago.metodo,
     cuenta: esTransferencia ? pago.cuenta : null,
     recibo: esTransferencia ? null : pago.recibo || null,
+  }
+}
+
+// ── Docentes ───────────────────────────────────────────────────────────────
+
+export function docenteDesdeFila(fila) {
+  return {
+    id: fila.id,
+    nombre: fila.nombre,
+    telefono: fila.telefono ?? '',
+    email: fila.email ?? '',
+    rol: fila.rol,
+  }
+}
+
+export function filaDesdeDocente(docente) {
+  return {
+    id: docente.id,
+    nombre: docente.nombre,
+    nombre_normalizado: claveNombre(docente.nombre),
+    telefono: docente.telefono ?? '',
+    email: docente.email ?? '',
+    rol: docente.rol,
+  }
+}
+
+// ── Lista de espera ────────────────────────────────────────────────────────
+
+export function esperaDesdeFila(fila) {
+  return {
+    id: fila.id,
+    nombre: fila.nombre,
+    telefono: fila.telefono,
+    claseId: fila.clase_id ?? null,
+    fechaSolicitud: fila.fecha_solicitud,
+    estado: fila.estado,
+    notas: fila.notas ?? '',
+  }
+}
+
+export function filaDesdeEspera(persona) {
+  return {
+    id: persona.id,
+    nombre: persona.nombre,
+    telefono: persona.telefono,
+    clase_id: persona.claseId || null,
+    fecha_solicitud: persona.fechaSolicitud,
+    estado: persona.estado,
+    notas: persona.notas ?? '',
   }
 }
 
@@ -96,6 +147,7 @@ export function claseDesdeFila(fila, participantes = []) {
     duracion: fila.duracion,
     actividad: fila.actividad,
     profe: fila.profe ?? '',
+    docenteId: fila.docente_id ?? null,
     cupo: fila.cupo,
     participantes,
   }
@@ -108,6 +160,7 @@ export function filaDesdeClase(clase) {
     id: clase.id,
     actividad: clase.actividad,
     profe: clase.profe ?? '',
+    docente_id: clase.docenteId || null,
     dia: clase.dia,
     hora: clase.hora,
     duracion: clase.duracion ?? 45,
@@ -121,6 +174,7 @@ export function cambiosDeClase(cambios) {
   const columnas = ['actividad', 'profe', 'dia', 'hora', 'duracion', 'cupo']
   const fila = {}
   for (const c of columnas) if (c in cambios) fila[c] = cambios[c]
+  if ('docenteId' in cambios) fila.docente_id = cambios.docenteId || null
   return fila
 }
 
@@ -129,7 +183,15 @@ export function cambiosDeClase(cambios) {
 /** Las cinco consultas sueltas → la misma forma que antes tenía `localStorage`:
  *  `{ clientes, horarios, asistencias }`. Desde acá para arriba, nadie sabe si
  *  esto vino de una base o de un archivo. */
-export function armarCrudos({ clientes, clases, participantes, pagos, asistencias }) {
+export function armarCrudos({
+  clientes,
+  clases,
+  participantes,
+  pagos,
+  asistencias,
+  docentes = [],
+  listaEspera = [],
+}) {
   const historialPorCliente = new Map()
   for (const p of pagos) {
     if (!historialPorCliente.has(p.cliente_id)) historialPorCliente.set(p.cliente_id, [])
@@ -158,5 +220,7 @@ export function armarCrudos({ clientes, clases, participantes, pagos, asistencia
     clientes: clientes.map((c) => clienteDesdeFila(c, historialPorCliente.get(c.id) ?? [])),
     horarios: clases.map((c) => claseDesdeFila(c, participantesPorClase.get(c.id) ?? [])),
     asistencias: porClase,
+    docentes: docentes.map(docenteDesdeFila),
+    listaEspera: listaEspera.map(esperaDesdeFila),
   }
 }

@@ -31,6 +31,9 @@ const ID_A = 970000 + Number(marca.slice(-3))
 const ID_B = ID_A + 1
 const CLASE = `persist-${marca}`
 const FECHA = '2026-03-04'
+const DOCENTE = `97000000-0000-4000-8000-${marca.padStart(12, '0')}`
+const ESPERA = `98000000-0000-4000-8000-${marca.padStart(12, '0')}`
+const PAGO_A = `99000000-0000-4000-8000-${marca.padStart(12, '0')}`
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
 
@@ -46,11 +49,13 @@ try {
   const db = crearPersistencia(sesion.user.id)
 
   const limpiar = async () => {
+    await supabase.from('lista_espera').delete().eq('id', ESPERA)
     await supabase.from('asistencias').delete().eq('clase_id', CLASE)
     await supabase.from('participantes').delete().eq('clase_id', CLASE)
     await supabase.from('clases').delete().eq('id', CLASE)
     await supabase.from('pagos').delete().in('cliente_id', [ID_A, ID_B])
     await supabase.from('clientes').delete().in('id', [ID_A, ID_B])
+    await supabase.from('docentes').delete().eq('id', DOCENTE)
   }
   await limpiar()
 
@@ -59,6 +64,8 @@ try {
     clientes: crudos.clientes.filter((c) => c.id === ID_A || c.id === ID_B),
     horarios: crudos.horarios.filter((h) => h.id === CLASE),
     asistencias: crudos.asistencias[CLASE] ? { [CLASE]: crudos.asistencias[CLASE] } : {},
+    docentes: (crudos.docentes ?? []).filter((d) => d.id === DOCENTE),
+    listaEspera: (crudos.listaEspera ?? []).filter((p) => p.id === ESPERA),
   })
 
   try {
@@ -78,14 +85,28 @@ try {
     ok(true, 'los dos clientes entraron')
 
     // El estado local arranca como lo dejaría una carga: se compara contra él.
-    let local = { clientes: [], horarios: [], asistencias: {} }
+    let local = { clientes: [], horarios: [], asistencias: {}, docentes: [], listaEspera: [] }
+    const docente = {
+      id: DOCENTE, nombre: 'Nora Docente', telefono: '11 4444-3333',
+      email: 'nora@example.com', rol: 'titular',
+    }
+    local = store.conDocenteCreado(local, docente)
+    await db.crearDocente(docente)
     local = store.conClaseCreada(local, {
-      actividad: 'Ensayo', dia: 4, hora: '07:30', profe: 'Nadie', cupo: 3, duracion: 40,
+      actividad: 'Ensayo', dia: 4, hora: '07:30', profe: docente.nombre,
+      docenteId: docente.id, cupo: 3, duracion: 40,
     })
     // `conClaseCreada` genera 'clase-1'; acá hace falta el id del ensayo.
     local.horarios[0].id = CLASE
     await db.crearClase(local.horarios[0])
     ok(true, 'la clase entró')
+
+    const personaEnEspera = {
+      id: ESPERA, nombre: 'Espera Núñez', telefono: '11 4444-2222', claseId: CLASE,
+      fechaSolicitud: '2026-03-03', estado: 'esperando', notas: 'Solo por la mañana.',
+    }
+    local = store.conPersonaEnEsperaCreada(local, personaEnEspera)
+    await db.crearEnEspera(personaEnEspera)
 
     console.log('\n── 2. El ciclo completo, con el código real de la app ───────')
     // Cada paso: la misma función pura que usa la pantalla + la misma escritura.
@@ -98,10 +119,10 @@ try {
     await db.marcarAsistencia(CLASE, FECHA, ID_A, true)
 
     const pago = {
-      fecha: '2026-03-01', monto: 48000, metodo: 'transferencia', cuenta: 'nx-moni',
+      id: PAGO_A, fecha: '2026-03-01', monto: 48000, metodo: 'transferencia', cuenta: 'nx-moni',
       vencimiento: '2026-04-01',
     }
-    local = store.conPagoRegistrado(local, ID_A, pago)
+    local = store.conPagoIdentificado(local, ID_A, pago)
     await db.registrarPago(ID_A, pago)
 
     const efectivo = {
@@ -119,6 +140,19 @@ try {
       return mio ? { ...c, ...mio } : c
     })
 
+    const clienteAntes = local.clientes.find((c) => c.id === ID_A)
+    const pagoAntes = clienteAntes.historialPagos.find((p) => p.id === PAGO_A)
+    const pagoCorregido = {
+      fecha: '2026-03-01', monto: 49500, metodo: 'transferencia', cuenta: 'bbva-ser',
+      vencimiento: '2026-04-01',
+    }
+    local = store.conPagoEditado(local, ID_A, PAGO_A, pagoCorregido, true)
+    await db.editarPago(ID_A, PAGO_A, pagoCorregido, true, {
+      pago: pagoAntes,
+      fechaPago: clienteAntes.fechaPago,
+      fechaVencimiento: clienteAntes.fechaVencimiento,
+    })
+
     console.log('\n── 3. Lo que quedó en pantalla == lo que devuelve la base ───')
     const base = soloDelEnsayo(await db.cargarTodo())
 
@@ -134,13 +168,18 @@ try {
 
     ok(a.historialPagos.length === 1, 'el pago quedó asentado en el historial')
     ok(a.historialPagos[0].metodo === 'transferencia', 'con su método')
-    ok(a.historialPagos[0].cuenta === 'nx-moni', 'y con la cuenta donde entró')
+    ok(a.historialPagos[0].monto === 49500, 'la corrección del importe vuelve desde la base')
+    ok(a.historialPagos[0].cuenta === 'bbva-ser', 'y actualiza la cuenta donde entró')
     ok(a.historialPagos[0].recibo === undefined, 'una transferencia NO trae número de recibo')
     ok(b.historialPagos[0].recibo === '0091', 'el efectivo sí trae el recibo')
     ok(b.historialPagos[0].cuenta === undefined, 'y el efectivo NO trae cuenta')
 
+    ok(base.docentes[0]?.nombre === 'Nora Docente', 'la docente asignada vuelve con sus datos')
+    ok(base.listaEspera[0]?.claseId === CLASE, 'la lista de espera conserva la clase solicitada')
+
     const clase = base.horarios[0]
     ok(clase.actividad === 'Ensayo' && clase.hora === '07:30', `la clase vuelve igual (${clase.hora})`)
+    ok(clase.docenteId === DOCENTE, 'la clase conserva su docente a cargo')
     ok(clase.cupo === 3 && clase.duracion === 40, 'con su cupo y su duración')
     ok(clase.participantes.length === 2, `con los dos anotados (${clase.participantes.length})`)
     ok(base.asistencias[CLASE]?.[FECHA]?.length === 1, 'y con la asistencia de ese día')
@@ -173,6 +212,14 @@ try {
     ok(
       JSON.stringify(canonico(local.asistencias)) === JSON.stringify(canonico(base.asistencias)),
       'y la asistencia también',
+    )
+    ok(
+      JSON.stringify(canonico(local.docentes)) === JSON.stringify(canonico(base.docentes)),
+      'los docentes de la pantalla y la base son idénticos',
+    )
+    ok(
+      JSON.stringify(canonico(local.listaEspera)) === JSON.stringify(canonico(base.listaEspera)),
+      'la lista de espera de la pantalla y la base es idéntica',
     )
 
     console.log('\n── 4. El importador actualiza, no duplica ───────────────────')

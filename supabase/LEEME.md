@@ -20,17 +20,24 @@ Se hace **una sola vez**. Después de esto la app tiene base, usuaria y claves.
 
 ---
 
-## 2. Aplicar la migración
+## 2. Aplicar las migraciones
 
-El archivo es [`supabase/migrations/20260812120000_esquema_inicial.sql`](migrations/20260812120000_esquema_inicial.sql).
+Los archivos están en `supabase/migrations/` y se aplican por fecha:
+
+1. [`20260812120000_esquema_inicial.sql`](migrations/20260812120000_esquema_inicial.sql)
+2. [`20260812180000_docentes_lista_espera.sql`](migrations/20260812180000_docentes_lista_espera.sql)
+
+Si el proyecto ya estaba funcionando, la primera ya está aplicada: ejecutá
+**solamente la segunda**. Esa migración crea Docentes y Lista de espera, y convierte
+automáticamente en docentes titulares los nombres que ya tienen las clases.
 
 **Camino corto (recomendado):**
 
-1. Copiá el archivo entero al portapapeles. En PowerShell, parado en la carpeta del
-   proyecto:
+1. Copiá la migración que corresponda entera al portapapeles. Para la nueva, en
+   PowerShell y desde la carpeta del proyecto:
 
    ```powershell
-   Get-Content "supabase\migrations\20260812120000_esquema_inicial.sql" -Raw | Set-Clipboard
+   Get-Content "supabase\migrations\20260812180000_docentes_lista_espera.sql" -Raw | Set-Clipboard
    ```
 
 2. En el panel de Supabase: **SQL Editor** → **New query** → pegá → **Run**
@@ -38,8 +45,9 @@ El archivo es [`supabase/migrations/20260812120000_esquema_inicial.sql`](migrati
 3. Tiene que decir **Success. No rows returned**. Si tira error, copiame el mensaje
    tal cual.
 
-**Cómo saber que quedó bien:** andá a **Table Editor**. Tienen que estar las cinco
-tablas — `clientes`, `clases`, `participantes`, `pagos`, `asistencias` — y cada una
+**Cómo saber que quedó bien:** andá a **Table Editor**. Tienen que estar las siete
+tablas — `clientes`, `clases`, `participantes`, `pagos`, `asistencias`, `docentes`,
+`lista_espera` — y cada una
 con un cartelito verde que dice **RLS enabled**. Si alguna dice "RLS disabled" o
 sale un banner rojo de "unrestricted", avisame: sin RLS los datos quedan a la vista
 de cualquiera que tenga la URL.

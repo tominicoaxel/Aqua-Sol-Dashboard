@@ -30,13 +30,21 @@ export function derivarClientes(crudos) {
   })
 }
 
-export function derivarHorarios(crudos, porId) {
-  return crudos.map((h) => ({
-    ...h,
-    ocupados: h.participantes.length,
-    lleno: h.participantes.length >= h.cupo,
-    grupo: h.participantes.map((id) => porId.get(id)).filter(Boolean),
-  }))
+export function derivarHorarios(crudos, porId, docentesPorId = new Map()) {
+  return crudos.map((h) => {
+    const docente = docentesPorId.get(h.docenteId)
+    // Los datos de verificación anteriores a la tabla de docentes no traen la
+    // propiedad. En los datos nuevos, un id nulo sí significa "sin asignar".
+    const nombreDocente = docente?.nombre ?? (!('docenteId' in h) ? h.profe : 'Sin docente asignado')
+    return {
+      ...h,
+      profe: nombreDocente,
+      docente: docente ?? null,
+      ocupados: h.participantes.length,
+      lleno: h.participantes.length >= h.cupo,
+      grupo: h.participantes.map((id) => porId.get(id)).filter(Boolean),
+    }
+  })
 }
 
 /** Las clases de un día (0 domingo … 6 sábado), ordenadas por hora. */

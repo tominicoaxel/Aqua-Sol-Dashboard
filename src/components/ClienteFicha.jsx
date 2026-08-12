@@ -8,6 +8,7 @@ import {
   formatoMonto,
   nombreDia,
   parseISO,
+  aISO,
 } from '../lib/fechas.js'
 import { isoDeHoy, useDatos, vencimientoPara } from '../lib/store.jsx'
 import { CUENTAS, METODOS, TITULARES, descripcionPago } from '../lib/pagos.js'
@@ -48,16 +49,20 @@ const errorDeFechas = (pago, vencimiento) => {
 /** Registrar un pago. Además de mover las fechas, asienta el pago en el historial:
  *  si la ficha mostrara arriba un pago que abajo no figura, el número dejaría de
  *  ser confiable. */
-function FormularioPago({ cliente, onConfirmar, onCancelar }) {
+function FormularioPago({ cliente, pago = null, esUltimo = false, onConfirmar, onCancelar }) {
+  const editando = Boolean(pago)
   const hoyISO = isoDeHoy()
-  const [fecha, setFecha] = useState(hoyISO)
-  const [vencimiento, setVencimiento] = useState(() => vencimientoPara(hoyISO))
-  const [vencManual, setVencManual] = useState(false)
-  const [monto, setMonto] = useState(String(cliente.cuota))
-  const [metodo, setMetodo] = useState('transferencia')
-  const [cuenta, setCuenta] = useState(CUENTAS[0].id)
-  const [recibo, setRecibo] = useState('')
+  const [fecha, setFecha] = useState(() => pago ? aISO(pago.fecha) : hoyISO)
+  const [vencimiento, setVencimiento] = useState(() =>
+    editando && esUltimo ? cliente.fechaVencimiento : vencimientoPara(hoyISO),
+  )
+  const [vencManual, setVencManual] = useState(editando)
+  const [monto, setMonto] = useState(String(pago?.monto ?? cliente.cuota))
+  const [metodo, setMetodo] = useState(pago?.metodo ?? 'transferencia')
+  const [cuenta, setCuenta] = useState(pago?.cuenta ?? CUENTAS[0].id)
+  const [recibo, setRecibo] = useState(pago?.recibo ?? '')
   const [tocado, setTocado] = useState(false)
+  const muestraVencimiento = !editando || esUltimo
 
   // Al cambiar de método se limpia el dato del otro. Si no, alguien tipea un
   // recibo, se da cuenta de que fue transferencia, cambia — y el recibo viejo se
@@ -74,7 +79,18 @@ function FormularioPago({ cliente, onConfirmar, onCancelar }) {
     if (!vencManual && valor) setVencimiento(vencimientoPara(valor))
   }
 
-  const errorFechas = errorDeFechas(fecha, vencimiento)
+  let errorFecha = fecha ? null : 'Falta la fecha.'
+  if (editando && fecha) {
+    if (esUltimo) {
+      const pagoAnterior = cliente.historial.find((p) => p.id !== pago.id)
+      if (pagoAnterior && fecha < aISO(pagoAnterior.fecha)) {
+        errorFecha = 'El último pago no puede quedar antes del pago anterior.'
+      }
+    } else if (fecha > cliente.fechaPago) {
+      errorFecha = 'Un pago anterior no puede quedar después del último pago.'
+    }
+  }
+  const errorFechas = muestraVencimiento ? (errorFecha || errorDeFechas(fecha, vencimiento)) : errorFecha
   const errorMonto = Number(monto) > 0 ? null : 'Poné un importe mayor a cero.'
   const invalido = Boolean(errorFechas || errorMonto)
 
@@ -95,32 +111,40 @@ function FormularioPago({ cliente, onConfirmar, onCancelar }) {
       }}
     >
       <h4 className="font-titulo text-xs font-semibold tracking-wide text-tinta-2 uppercase">
-        Registrar un pago
+        {editando ? 'Editar pago' : 'Registrar un pago'}
       </h4>
 
+      {editando && esUltimo && (
+        <p className="mt-2 text-xs leading-relaxed text-tinta-3">
+          Como es el último pago, la corrección también actualiza las fechas principales de la cuota.
+        </p>
+      )}
+
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <Campo etiqueta="Fecha de pago" error={tocado && !fecha ? 'Falta la fecha.' : null}>
+        <Campo etiqueta="Fecha de pago" error={tocado ? errorFecha : null}>
           {(p) => <input {...p} type="date" value={fecha} onChange={(e) => cambiarFecha(e.target.value)} onBlur={() => setTocado(true)} />}
         </Campo>
 
-        <Campo
-          etiqueta="Vence el"
-          ayuda={vencManual ? 'Editado a mano' : 'Un mes después'}
-          error={tocado ? errorFechas : null}
-        >
-          {(p) => (
-            <input
-              {...p}
-              type="date"
-              value={vencimiento}
-              onChange={(e) => {
-                setVencManual(true)
-                setVencimiento(e.target.value)
-              }}
-              onBlur={() => setTocado(true)}
-            />
-          )}
-        </Campo>
+        {muestraVencimiento && (
+          <Campo
+            etiqueta="Vence el"
+            ayuda={vencManual ? 'Editado a mano' : 'Un mes después'}
+            error={tocado ? errorFechas : null}
+          >
+            {(p) => (
+              <input
+                {...p}
+                type="date"
+                value={vencimiento}
+                onChange={(e) => {
+                  setVencManual(true)
+                  setVencimiento(e.target.value)
+                }}
+                onBlur={() => setTocado(true)}
+              />
+            )}
+          </Campo>
+        )}
 
         <Campo etiqueta="Importe" ayuda={`Cuota: ${formatoMonto(cliente.cuota)}`} error={tocado ? errorMonto : null}>
           {(p) => (
@@ -198,7 +222,7 @@ function FormularioPago({ cliente, onConfirmar, onCancelar }) {
 
       <div className="mt-4 flex gap-2">
         <Boton variante="primario" type="submit" disabled={tocado && invalido}>
-          Confirmar pago
+          {editando ? 'Guardar cambios' : 'Confirmar pago'}
         </Boton>
         <Boton variante="secundario" onClick={onCancelar}>
           Cancelar
@@ -265,12 +289,16 @@ function FormularioFechas({ cliente, onConfirmar, onCancelar }) {
 }
 
 export default function ClienteFicha({ clienteId, onCerrar, onAbrirClase }) {
-  const { clientePorId, horarios, registrarPago, editarFechas, avisar } = useDatos()
+  const { clientePorId, horarios, registrarPago, editarPago, editarFechas, avisar } = useDatos()
   const [modo, setModo] = useState(null)
+  const [pagoEditandoId, setPagoEditandoId] = useState(null)
 
   // Cambiar de cliente cierra cualquier formulario que hubiera quedado abierto, para
   // no registrarle a alguien un pago que se estaba escribiendo para otra persona.
-  useEffect(() => setModo(null), [clienteId])
+  useEffect(() => {
+    setModo(null)
+    setPagoEditandoId(null)
+  }, [clienteId])
 
   const cliente = clienteId ? clientePorId(clienteId) : null
   if (!cliente) return null
@@ -288,6 +316,15 @@ export default function ClienteFicha({ clienteId, onCerrar, onAbrirClase }) {
     editarFechas(cliente.id, datos)
     setModo(null)
     avisar(`Actualizaste las fechas de ${cliente.nombre}.`)
+  }
+
+  const pagoEditando = cliente.historial.find((p) => p.id === pagoEditandoId) ?? null
+  const esUltimoPago = Boolean(pagoEditando && cliente.historial[0]?.id === pagoEditando.id)
+
+  const confirmarEdicionPago = (datos) => {
+    editarPago(cliente.id, pagoEditando.id, datos, esUltimoPago)
+    setPagoEditandoId(null)
+    avisar(`Actualizaste el pago de ${cliente.nombre}.`)
   }
 
   return (
@@ -403,6 +440,18 @@ export default function ClienteFicha({ clienteId, onCerrar, onAbrirClase }) {
       </Seccion>
 
       <Seccion titulo="Historial de pagos" extra={<span className="dato text-[11px] text-tinta-3">{cliente.historial.length}</span>}>
+        {pagoEditando && (
+          <div className="mb-3">
+            <FormularioPago
+              key={pagoEditando.id}
+              cliente={cliente}
+              pago={pagoEditando}
+              esUltimo={esUltimoPago}
+              onConfirmar={confirmarEdicionPago}
+              onCancelar={() => setPagoEditandoId(null)}
+            />
+          </div>
+        )}
         <div className="overflow-hidden rounded-2xl border border-borde bg-white">
           <table className="w-full text-left">
             <thead>
@@ -410,14 +459,27 @@ export default function ClienteFicha({ clienteId, onCerrar, onAbrirClase }) {
                 <th scope="col" className="px-4 py-2 font-medium">Fecha</th>
                 <th scope="col" className="px-4 py-2 font-medium">Importe</th>
                 <th scope="col" className="px-4 py-2 font-medium">Cómo pagó</th>
+                <th scope="col" className="px-2 py-2 font-medium"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-borde-suave">
               {cliente.historial.map((p, i) => (
-                <tr key={`${p.fecha.getTime()}-${i}`}>
+                <tr key={p.id ?? `${p.fecha.getTime()}-${i}`}>
                   <td className="dato px-4 py-2.5 text-sm text-tinta-2">{formatoFecha(p.fecha)}</td>
                   <td className="dato px-4 py-2.5 text-sm font-medium text-tinta">{formatoMonto(p.monto)}</td>
                   <td className="px-4 py-2.5 text-xs text-tinta-3">{descripcionPago(p)}</td>
+                  <td className="px-1 py-1 text-right">
+                    {p.id && (
+                      <button
+                        type="button"
+                        onClick={() => setPagoEditandoId(p.id)}
+                        className="min-h-11 rounded-lg px-2 text-xs font-medium text-cloro-tinta transition hover:bg-cloro/10"
+                        aria-label={`Editar pago del ${formatoFecha(p.fecha)}`}
+                      >
+                        Editar
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

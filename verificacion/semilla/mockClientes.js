@@ -50,6 +50,7 @@ function generarHistorial(venceEnDias, diasComoCliente, cuota, semilla) {
     }
     const enEfectivo = mezcla(semilla * 13 + i * 101) % 5 === 0
     pagos.push({
+      id: `pago-${semilla}-${i}`,
       fecha: desdeHoy(venceEnDias - 30 - i * 30),
       monto,
       ...(enEfectivo

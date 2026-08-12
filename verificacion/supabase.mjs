@@ -16,7 +16,7 @@ const ok = (cond, texto) => {
   if (!cond) fallas++
 }
 
-const TABLAS = ['clientes', 'clases', 'participantes', 'pagos', 'asistencias']
+const TABLAS = ['clientes', 'clases', 'participantes', 'pagos', 'asistencias', 'docentes', 'lista_espera']
 
 // Rango alto y prefijo propio para no pisarle nada a los datos reales.
 const marca = Date.now().toString().slice(-6)
@@ -24,6 +24,8 @@ const ID_CLIENTE_A = 990000 + Number(marca.slice(-3))
 const ID_CLIENTE_B = ID_CLIENTE_A + 1
 const ID_CLASE = `verif-${marca}`
 const FECHA_ASISTENCIA = '2026-01-07'
+const ID_DOCENTE = `91000000-0000-4000-8000-${marca.padStart(12, '0')}`
+const ID_ESPERA = `92000000-0000-4000-8000-${marca.padStart(12, '0')}`
 
 if (!hayCredenciales()) {
   console.log('\n── Supabase ─────────────────────────────────────────────────')
@@ -76,11 +78,13 @@ if (errorLogin) {
 const usuarioId = sesion.user.id
 
 const limpiar = async () => {
+  await db.from('lista_espera').delete().eq('id', ID_ESPERA)
   await db.from('asistencias').delete().eq('clase_id', ID_CLASE)
   await db.from('participantes').delete().eq('clase_id', ID_CLASE)
   await db.from('clases').delete().eq('id', ID_CLASE)
   await db.from('pagos').delete().in('cliente_id', [ID_CLIENTE_A, ID_CLIENTE_B])
   await db.from('clientes').delete().in('id', [ID_CLIENTE_A, ID_CLIENTE_B])
+  await db.from('docentes').delete().eq('id', ID_DOCENTE)
 }
 
 try {
@@ -180,10 +184,24 @@ try {
 
   console.log('\n── 5. Cascadas: la asimetría del historial ──────────────────')
   {
+    const { error: errorDocente } = await db.from('docentes').insert({
+      id: ID_DOCENTE, usuario_id: usuarioId, nombre: 'Docente Verificación',
+      nombre_normalizado: 'docente verificacion', telefono: '11 5555-3333',
+      email: 'docente@example.com', rol: 'titular',
+    })
+    ok(!errorDocente, `alta de docente${errorDocente ? ` (${errorDocente.message})` : ''}`)
+
     await db.from('clases').insert({
       id: ID_CLASE, usuario_id: usuarioId, actividad: 'Verificación',
-      profe: 'Nadie', dia: 3, hora: '09:00', duracion: 40, cupo: 4,
+      profe: 'Docente Verificación', docente_id: ID_DOCENTE,
+      dia: 3, hora: '09:00', duracion: 40, cupo: 4,
     })
+    const { error: errorEspera } = await db.from('lista_espera').insert({
+      id: ID_ESPERA, usuario_id: usuarioId, nombre: 'Persona Esperando',
+      telefono: '11 5555-2222', clase_id: ID_CLASE, fecha_solicitud: '2026-08-12',
+      estado: 'esperando', notas: 'Prefiere la mañana.',
+    })
+    ok(!errorEspera, `la espera acepta una clase propia${errorEspera ? ` (${errorEspera.message})` : ''}`)
     await db.from('participantes').insert({ clase_id: ID_CLASE, cliente_id: ID_CLIENTE_A })
     await db.from('asistencias').insert({ clase_id: ID_CLASE, fecha: FECHA_ASISTENCIA, cliente_id: ID_CLIENTE_A })
 
@@ -206,8 +224,12 @@ try {
       .from('asistencias').select('*', { count: 'exact', head: true }).eq('clase_id', ID_CLASE)
     const { count: participantesTras } = await db
       .from('participantes').select('*', { count: 'exact', head: true }).eq('clase_id', ID_CLASE)
+    const { data: esperaTras } = await db.from('lista_espera').select('clase_id').eq('id', ID_ESPERA).single()
+    const { data: docenteTras } = await db.from('docentes').select('id').eq('id', ID_DOCENTE).single()
     ok(tras === 0, 'eliminar la clase se lleva sus asistencias')
     ok(participantesTras === 0, 'eliminar la clase se lleva sus participantes')
+    ok(esperaTras?.clase_id === null, 'eliminar la clase conserva a la persona en espera, pero la desasigna')
+    ok(docenteTras?.id === ID_DOCENTE, 'eliminar una clase no elimina a su docente')
   }
 } finally {
   await limpiar()

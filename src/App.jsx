@@ -3,6 +3,8 @@ import ResumenGeneral from './components/ResumenGeneral.jsx'
 import ClientesPanel from './components/ClientesPanel.jsx'
 import ClienteFicha from './components/ClienteFicha.jsx'
 import HorariosPanel from './components/HorariosPanel.jsx'
+import DocentesPanel from './components/DocentesPanel.jsx'
+import ListaEsperaPanel from './components/ListaEsperaPanel.jsx'
 import ClaseDetalle from './components/ClaseDetalle.jsx'
 import LineasDeCarril from './components/LineasDeCarril.jsx'
 import Aviso from './components/Aviso.jsx'
@@ -33,11 +35,27 @@ const IconoHorarios = (p) => (
     <path d="M2.6 8.2h14.8M6.6 2.6v2.8M13.4 2.6v2.8" />
   </svg>
 )
+const IconoDocentes = (p) => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M3 5.2L10 2l7 3.2-7 3.2z" />
+    <path d="M5.2 7.2v4.1c0 1.5 2.1 2.8 4.8 2.8s4.8-1.3 4.8-2.8V7.2M17 5.2v5" />
+  </svg>
+)
+const IconoEspera = (p) => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <circle cx="7" cy="6.2" r="2.7" />
+    <path d="M2.4 16c0-2.7 2-4.5 4.6-4.5 1.3 0 2.4.4 3.2 1.1" />
+    <circle cx="14.5" cy="13.5" r="3" />
+    <path d="M14.5 11.8v1.9l1.2.8" />
+  </svg>
+)
 
 const VISTAS = [
   { id: 'inicio', etiqueta: 'Inicio', Icono: IconoInicio },
   { id: 'clientes', etiqueta: 'Clientes', Icono: IconoClientes },
   { id: 'horarios', etiqueta: 'Horarios', Icono: IconoHorarios },
+  { id: 'docentes', etiqueta: 'Docentes', Icono: IconoDocentes },
+  { id: 'espera', etiqueta: 'Lista de espera', etiquetaCorta: 'Espera', Icono: IconoEspera },
 ]
 
 function Marca({ className = '' }) {
@@ -164,6 +182,8 @@ export default function App({ vistaInicial = 'inicio', clienteInicial = null, cl
               />
             )}
             {vista === 'horarios' && <HorariosPanel onAbrirClase={abrirClase} />}
+            {vista === 'docentes' && <DocentesPanel onAbrirClase={abrirClase} />}
+            {vista === 'espera' && <ListaEsperaPanel onAbrirClase={abrirClase} />}
           </>
         )}
       </main>
@@ -175,7 +195,7 @@ export default function App({ vistaInicial = 'inicio', clienteInicial = null, cl
         aria-label="Secciones"
       >
         <ul className="flex">
-          {VISTAS.map(({ id, etiqueta, Icono }) => {
+          {VISTAS.map(({ id, etiqueta, etiquetaCorta, Icono }) => {
             const activo = vista === id
             return (
               <li key={id} className="flex-1">
@@ -191,7 +211,7 @@ export default function App({ vistaInicial = 'inicio', clienteInicial = null, cl
                     <span className="absolute inset-x-0 top-0 mx-auto h-0.5 w-8 rounded-full bg-cloro" aria-hidden="true" />
                   )}
                   <Icono className="size-5" />
-                  {etiqueta}
+                  {etiquetaCorta ?? etiqueta}
                 </button>
               </li>
             )
