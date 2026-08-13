@@ -34,6 +34,7 @@ export function datosDeEjemplo() {
       {
         id: 'espera-1',
         nombre: 'Carolina Méndez',
+        edad: 8,
         telefono: '11 7000-1001',
         claseId: 'mar-1100',
         fechaSolicitud: '2026-08-10',
@@ -43,6 +44,7 @@ export function datosDeEjemplo() {
       {
         id: 'espera-2',
         nombre: 'Ramiro Acosta',
+        edad: 67,
         telefono: '11 7000-1002',
         claseId: 'sab-0900',
         fechaSolicitud: '2026-08-11',

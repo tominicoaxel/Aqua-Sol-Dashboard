@@ -32,6 +32,7 @@ import {
 import { cobradoDelMes, descripcionPago, CUENTAS } from '../src/lib/pagos.js'
 import { aISO, ocurrenciaMasReciente } from '../src/lib/fechas.js'
 import { derivarClientes, derivarHorarios, horariosDeCliente } from '../src/lib/datos.js'
+import { grupoEdadEspera } from '../src/lib/edades.js'
 
 const nada = () => {}
 
@@ -121,4 +122,5 @@ export {
   CUENTAS,
   aISO,
   ocurrenciaMasReciente,
+  grupoEdadEspera,
 }

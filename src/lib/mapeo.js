@@ -117,6 +117,7 @@ export function esperaDesdeFila(fila) {
   return {
     id: fila.id,
     nombre: fila.nombre,
+    edad: fila.edad == null ? null : Number(fila.edad),
     telefono: fila.telefono,
     claseId: fila.clase_id ?? null,
     fechaSolicitud: fila.fecha_solicitud,
@@ -129,6 +130,7 @@ export function filaDesdeEspera(persona) {
   return {
     id: persona.id,
     nombre: persona.nombre,
+    edad: persona.edad ?? null,
     telefono: persona.telefono,
     clase_id: persona.claseId || null,
     fecha_solicitud: persona.fechaSolicitud,

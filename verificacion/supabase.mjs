@@ -198,7 +198,7 @@ try {
     })
     const { error: errorEspera } = await db.from('lista_espera').insert({
       id: ID_ESPERA, usuario_id: usuarioId, nombre: 'Persona Esperando',
-      telefono: '11 5555-2222', clase_id: ID_CLASE, fecha_solicitud: '2026-08-12',
+      edad: 8, telefono: '11 5555-2222', clase_id: ID_CLASE, fecha_solicitud: '2026-08-12',
       estado: 'esperando', notas: 'Prefiere la mañana.',
     })
     ok(!errorEspera, `la espera acepta una clase propia${errorEspera ? ` (${errorEspera.message})` : ''}`)

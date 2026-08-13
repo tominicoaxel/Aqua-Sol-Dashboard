@@ -424,13 +424,19 @@ try {
 
   console.log('\n── 17. Gestión de la lista de espera ────────────────────────')
   {
+    ok(m.grupoEdadEspera(6)?.id === '6-8' && m.grupoEdadEspera(8)?.id === '6-8', 'las edades de 6 a 8 quedan en el primer grupo')
+    ok(m.grupoEdadEspera(9)?.id === '9-12' && m.grupoEdadEspera(12)?.id === '9-12', 'las edades de 9 a 12 quedan en el segundo grupo')
+    ok(m.grupoEdadEspera(13)?.id === '13-18' && m.grupoEdadEspera(18)?.id === '13-18', 'las edades de 13 a 18 quedan en el tercer grupo')
+    ok(m.grupoEdadEspera(66)?.id === 'mayores-65', 'las personas mayores de 65 quedan en el cuarto grupo')
+    ok(m.grupoEdadEspera(19) === null && m.grupoEdadEspera(65) === null, 'las edades fuera de los grupos no se asignan por error')
+
     const clase = datos.horarios[0]
     const persona = {
       id: 'espera-verificacion', nombre: 'Persona en espera', telefono: '11 4444-4444',
-      claseId: clase.id, fechaSolicitud: '2026-08-12', estado: 'esperando', notas: '',
+      edad: 11, claseId: clase.id, fechaSolicitud: '2026-08-12', estado: 'esperando', notas: '',
     }
     let ensayo = m.conPersonaEnEsperaCreada(datos, persona)
-    ok(ensayo.listaEspera.some((p) => p.id === persona.id && p.claseId === clase.id), 'el pedido guarda la clase y el horario elegidos')
+    ok(ensayo.listaEspera.some((p) => p.id === persona.id && p.claseId === clase.id && p.edad === 11), 'el pedido guarda la edad, la clase y el horario elegidos')
 
     ensayo = m.conPersonaEnEsperaEditada(ensayo, persona.id, { ...persona, estado: 'contactado', notas: 'Confirmar el viernes.' })
     const editada = ensayo.listaEspera.find((p) => p.id === persona.id)

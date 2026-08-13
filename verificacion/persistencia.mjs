@@ -103,7 +103,7 @@ try {
 
     const personaEnEspera = {
       id: ESPERA, nombre: 'Espera Núñez', telefono: '11 4444-2222', claseId: CLASE,
-      fechaSolicitud: '2026-03-03', estado: 'esperando', notas: 'Solo por la mañana.',
+      edad: 12, fechaSolicitud: '2026-03-03', estado: 'esperando', notas: 'Solo por la mañana.',
     }
     local = store.conPersonaEnEsperaCreada(local, personaEnEspera)
     await db.crearEnEspera(personaEnEspera)
@@ -175,7 +175,7 @@ try {
     ok(b.historialPagos[0].cuenta === undefined, 'y el efectivo NO trae cuenta')
 
     ok(base.docentes[0]?.nombre === 'Nora Docente', 'la docente asignada vuelve con sus datos')
-    ok(base.listaEspera[0]?.claseId === CLASE, 'la lista de espera conserva la clase solicitada')
+    ok(base.listaEspera[0]?.claseId === CLASE && base.listaEspera[0]?.edad === 12, 'la lista de espera conserva la edad y la clase solicitada')
 
     const clase = base.horarios[0]
     ok(clase.actividad === 'Ensayo' && clase.hora === '07:30', `la clase vuelve igual (${clase.hora})`)

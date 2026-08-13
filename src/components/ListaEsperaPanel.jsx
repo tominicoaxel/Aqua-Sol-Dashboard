@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { GRUPOS_EDAD_ESPERA, grupoEdadEspera } from '../lib/edades.js'
 import { formatoFecha, nombreDia, parseISO } from '../lib/fechas.js'
 import { isoDeHoy, useDatos } from '../lib/store.jsx'
 import Boton from './Boton.jsx'
@@ -18,6 +19,7 @@ function etiquetaClase(clase) {
 
 function FormularioEspera({ persona, horarios, onConfirmar, onCancelar }) {
   const [nombre, setNombre] = useState(persona?.nombre ?? '')
+  const [edad, setEdad] = useState(persona?.edad == null ? '' : String(persona.edad))
   const [telefono, setTelefono] = useState(persona?.telefono ?? '')
   const [claseId, setClaseId] = useState(persona?.claseId ?? '')
   const [fechaSolicitud, setFechaSolicitud] = useState(persona?.fechaSolicitud ?? isoDeHoy())
@@ -26,10 +28,18 @@ function FormularioEspera({ persona, horarios, onConfirmar, onCancelar }) {
   const [tocado, setTocado] = useState(false)
 
   const errorNombre = nombre.trim() ? null : 'Escribí el nombre de la persona.'
+  const edadNumero = Number(edad)
+  const errorEdad = !edad
+    ? 'Ingresá la edad para ubicar a la persona en su grupo.'
+    : !Number.isInteger(edadNumero)
+      ? 'Ingresá la edad en años enteros.'
+      : !grupoEdadEspera(edadNumero)
+        ? 'La edad debe ser de 6 a 18 años o mayor de 65.'
+        : null
   const errorTelefono = telefono.trim() ? null : 'Necesitás un teléfono para avisarle cuando haya lugar.'
   const errorClase = claseId ? null : 'Elegí la clase que quiere reservar.'
   const errorFecha = fechaSolicitud ? null : 'Elegí la fecha del pedido.'
-  const invalido = Boolean(errorNombre || errorTelefono || errorClase || errorFecha)
+  const invalido = Boolean(errorNombre || errorEdad || errorTelefono || errorClase || errorFecha)
   const ordenados = [...horarios].sort((a, b) => a.dia - b.dia || a.hora.localeCompare(b.hora))
 
   return (
@@ -41,6 +51,7 @@ function FormularioEspera({ persona, horarios, onConfirmar, onCancelar }) {
         if (invalido) return
         onConfirmar({
           nombre: nombre.trim(),
+          edad: edadNumero,
           telefono: telefono.trim(),
           claseId,
           fechaSolicitud,
@@ -56,10 +67,25 @@ function FormularioEspera({ persona, horarios, onConfirmar, onCancelar }) {
         <Campo etiqueta="Nombre y apellido *" error={tocado ? errorNombre : null}>
           {(p) => <input {...p} value={nombre} onChange={(e) => setNombre(e.target.value)} onBlur={() => setTocado(true)} />}
         </Campo>
+        <Campo etiqueta="Edad *" error={tocado ? errorEdad : null} ayuda="Grupos admitidos: 6 a 18 años y mayores de 65">
+          {(p) => (
+            <input
+              {...p}
+              className={`${p.className} dato`}
+              type="number"
+              inputMode="numeric"
+              min="6"
+              step="1"
+              value={edad}
+              onChange={(e) => setEdad(e.target.value)}
+              onBlur={() => setTocado(true)}
+            />
+          )}
+        </Campo>
         <Campo etiqueta="Teléfono *" error={tocado ? errorTelefono : null}>
           {(p) => <input {...p} type="tel" inputMode="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} onBlur={() => setTocado(true)} />}
         </Campo>
-        <Campo etiqueta="Clase y horario que reserva *" error={tocado ? errorClase : null} className="sm:col-span-2">
+        <Campo etiqueta="Clase y horario que reserva *" error={tocado ? errorClase : null}>
           {(p) => (
             <select {...p} value={claseId} onChange={(e) => setClaseId(e.target.value)}>
               <option value="">Elegir clase</option>
@@ -109,6 +135,7 @@ function TarjetaEspera({ persona, onEditar, onEliminar, eliminando, onCancelarEl
             )}
           </div>
           <a href={`tel:${persona.telefono.replace(/\s|-/g, '')}`} className="dato mt-1 inline-block text-xs text-cloro-tinta hover:underline">{persona.telefono}</a>
+          {persona.edad != null && <span className="dato ml-3 text-xs text-tinta-3">{persona.edad} años</span>}
         </div>
         {!eliminando && (
           <div className="flex gap-1">
@@ -178,6 +205,29 @@ export default function ListaEsperaPanel({ onAbrirClase }) {
     return p.estado === filtro
   })
   const activos = listaEspera.filter((p) => p.estado === 'esperando' || p.estado === 'contactado').length
+  const gruposVisibles = GRUPOS_EDAD_ESPERA.map((grupo) => ({
+    ...grupo,
+    personas: visibles.filter((persona) => grupoEdadEspera(persona.edad)?.id === grupo.id),
+  }))
+  // Los registros creados antes de que existiera la edad siguen visibles para que
+  // se puedan completar desde Editar; nunca se esconden por una migración.
+  const sinGrupo = visibles.filter((persona) => !grupoEdadEspera(persona.edad))
+
+  const renderPersonas = (personas) => (
+    <ul className="mt-3 space-y-3">
+      {personas.map((persona) => (
+        <TarjetaEspera
+          key={persona.id}
+          persona={persona}
+          onEditar={() => setFormulario(persona)}
+          eliminando={eliminando === persona.id}
+          onEliminar={() => eliminando === persona.id ? confirmarEliminar(persona) : setEliminando(persona.id)}
+          onCancelarEliminar={() => setEliminando(null)}
+          onAbrirClase={onAbrirClase}
+        />
+      ))}
+    </ul>
+  )
 
   return (
     <div className="space-y-5">
@@ -227,19 +277,30 @@ export default function ListaEsperaPanel({ onAbrirClase }) {
           <p className="mt-1 text-sm text-tinta-3">Podés cambiar el filtro o agregar un nuevo pedido.</p>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {visibles.map((persona) => (
-            <TarjetaEspera
-              key={persona.id}
-              persona={persona}
-              onEditar={() => setFormulario(persona)}
-              eliminando={eliminando === persona.id}
-              onEliminar={() => eliminando === persona.id ? confirmarEliminar(persona) : setEliminando(persona.id)}
-              onCancelarEliminar={() => setEliminando(null)}
-              onAbrirClase={onAbrirClase}
-            />
+        <div className="space-y-6">
+          {gruposVisibles.filter((grupo) => grupo.personas.length > 0).map((grupo) => (
+            <section key={grupo.id} aria-labelledby={`grupo-edad-${grupo.id}`}>
+              <div className="flex items-center gap-2">
+                <h2 id={`grupo-edad-${grupo.id}`} className="font-titulo text-lg font-semibold text-tinta">{grupo.etiqueta}</h2>
+                <span className="dato rounded-full bg-agua/10 px-2 py-0.5 text-xs text-agua">
+                  {grupo.personas.length}
+                </span>
+              </div>
+              {renderPersonas(grupo.personas)}
+            </section>
           ))}
-        </ul>
+
+          {sinGrupo.length > 0 && (
+            <section aria-labelledby="grupo-edad-pendiente">
+              <div className="flex items-center gap-2">
+                <h2 id="grupo-edad-pendiente" className="font-titulo text-lg font-semibold text-tinta">Edad pendiente</h2>
+                <span className="dato rounded-full bg-alerta/15 px-2 py-0.5 text-xs text-alerta-tinta">{sinGrupo.length}</span>
+              </div>
+              <p className="mt-1 text-xs text-tinta-3">Editá estas personas para asignarlas a uno de los grupos.</p>
+              {renderPersonas(sinGrupo)}
+            </section>
+          )}
+        </div>
       )}
     </div>
   )

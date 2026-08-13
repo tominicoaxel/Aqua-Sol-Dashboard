@@ -26,10 +26,11 @@ Los archivos están en `supabase/migrations/` y se aplican por fecha:
 
 1. [`20260812120000_esquema_inicial.sql`](migrations/20260812120000_esquema_inicial.sql)
 2. [`20260812180000_docentes_lista_espera.sql`](migrations/20260812180000_docentes_lista_espera.sql)
+3. [`20260812220000_lista_espera_edades.sql`](migrations/20260812220000_lista_espera_edades.sql)
 
-Si el proyecto ya estaba funcionando, la primera ya está aplicada: ejecutá
-**solamente la segunda**. Esa migración crea Docentes y Lista de espera, y convierte
-automáticamente en docentes titulares los nombres que ya tienen las clases.
+Si el proyecto ya estaba funcionando, ejecutá solamente las migraciones nuevas que
+todavía no aplicaste, siempre en ese orden. La segunda crea Docentes y Lista de
+espera; la tercera agrega la edad necesaria para separar esa lista por grupos.
 
 **Camino corto (recomendado):**
 
@@ -37,7 +38,7 @@ automáticamente en docentes titulares los nombres que ya tienen las clases.
    PowerShell y desde la carpeta del proyecto:
 
    ```powershell
-   Get-Content "supabase\migrations\20260812180000_docentes_lista_espera.sql" -Raw | Set-Clipboard
+   Get-Content "supabase\migrations\20260812220000_lista_espera_edades.sql" -Raw | Set-Clipboard
    ```
 
 2. En el panel de Supabase: **SQL Editor** → **New query** → pegá → **Run**
