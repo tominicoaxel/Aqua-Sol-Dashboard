@@ -51,6 +51,16 @@ export function datosDeEjemplo() {
         estado: 'contactado',
         notas: '',
       },
+      {
+        id: 'espera-3',
+        nombre: 'Luciana Pérez',
+        edad: 35,
+        telefono: '11 7000-1003',
+        claseId: 'jue-1100',
+        fechaSolicitud: '2026-08-12',
+        estado: 'esperando',
+        notas: 'Puede asistir después de las 18.',
+      },
     ],
   }
 }

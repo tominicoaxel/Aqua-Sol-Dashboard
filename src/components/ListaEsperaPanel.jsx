@@ -30,11 +30,11 @@ function FormularioEspera({ persona, horarios, onConfirmar, onCancelar }) {
   const errorNombre = nombre.trim() ? null : 'Escribí el nombre de la persona.'
   const edadNumero = Number(edad)
   const errorEdad = !edad
-    ? 'Ingresá la edad para ubicar a la persona en su grupo.'
-    : !Number.isInteger(edadNumero)
-      ? 'Ingresá la edad en años enteros.'
-      : !grupoEdadEspera(edadNumero)
-        ? 'La edad debe ser de 6 a 18 años o mayor de 65.'
+      ? 'Ingresá la edad para ubicar a la persona en su grupo.'
+      : !Number.isInteger(edadNumero)
+        ? 'Ingresá la edad en años enteros.'
+        : !grupoEdadEspera(edadNumero)
+        ? 'La edad debe ser de 6 años o más.'
         : null
   const errorTelefono = telefono.trim() ? null : 'Necesitás un teléfono para avisarle cuando haya lugar.'
   const errorClase = claseId ? null : 'Elegí la clase que quiere reservar.'
@@ -67,7 +67,7 @@ function FormularioEspera({ persona, horarios, onConfirmar, onCancelar }) {
         <Campo etiqueta="Nombre y apellido *" error={tocado ? errorNombre : null}>
           {(p) => <input {...p} value={nombre} onChange={(e) => setNombre(e.target.value)} onBlur={() => setTocado(true)} />}
         </Campo>
-        <Campo etiqueta="Edad *" error={tocado ? errorEdad : null} ayuda="Grupos admitidos: 6 a 18 años y mayores de 65">
+        <Campo etiqueta="Edad *" error={tocado ? errorEdad : null} ayuda="Se asigna automáticamente al grupo correspondiente">
           {(p) => (
             <input
               {...p}

@@ -27,10 +27,12 @@ Los archivos están en `supabase/migrations/` y se aplican por fecha:
 1. [`20260812120000_esquema_inicial.sql`](migrations/20260812120000_esquema_inicial.sql)
 2. [`20260812180000_docentes_lista_espera.sql`](migrations/20260812180000_docentes_lista_espera.sql)
 3. [`20260812220000_lista_espera_edades.sql`](migrations/20260812220000_lista_espera_edades.sql)
+4. [`20260812223000_lista_espera_adultos.sql`](migrations/20260812223000_lista_espera_adultos.sql)
 
 Si el proyecto ya estaba funcionando, ejecutá solamente las migraciones nuevas que
 todavía no aplicaste, siempre en ese orden. La segunda crea Docentes y Lista de
 espera; la tercera agrega la edad necesaria para separar esa lista por grupos.
+La cuarta habilita el grupo Adultos, de 19 a 65 años.
 
 **Camino corto (recomendado):**
 
@@ -38,7 +40,7 @@ espera; la tercera agrega la edad necesaria para separar esa lista por grupos.
    PowerShell y desde la carpeta del proyecto:
 
    ```powershell
-   Get-Content "supabase\migrations\20260812220000_lista_espera_edades.sql" -Raw | Set-Clipboard
+   Get-Content "supabase\migrations\20260812223000_lista_espera_adultos.sql" -Raw | Set-Clipboard
    ```
 
 2. En el panel de Supabase: **SQL Editor** → **New query** → pegá → **Run**

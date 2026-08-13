@@ -2,6 +2,7 @@ export const GRUPOS_EDAD_ESPERA = [
   { id: '6-8', etiqueta: 'De 6 a 8 años', desde: 6, hasta: 8 },
   { id: '9-12', etiqueta: 'De 9 a 12 años', desde: 9, hasta: 12 },
   { id: '13-18', etiqueta: 'De 13 a 18 años', desde: 13, hasta: 18 },
+  { id: 'adultos', etiqueta: 'Adultos', desde: 19, hasta: 65 },
   { id: 'mayores-65', etiqueta: 'Mayores de 65 años', desde: 66, hasta: Infinity },
 ]
 

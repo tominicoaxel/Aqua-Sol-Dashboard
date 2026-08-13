@@ -427,8 +427,9 @@ try {
     ok(m.grupoEdadEspera(6)?.id === '6-8' && m.grupoEdadEspera(8)?.id === '6-8', 'las edades de 6 a 8 quedan en el primer grupo')
     ok(m.grupoEdadEspera(9)?.id === '9-12' && m.grupoEdadEspera(12)?.id === '9-12', 'las edades de 9 a 12 quedan en el segundo grupo')
     ok(m.grupoEdadEspera(13)?.id === '13-18' && m.grupoEdadEspera(18)?.id === '13-18', 'las edades de 13 a 18 quedan en el tercer grupo')
-    ok(m.grupoEdadEspera(66)?.id === 'mayores-65', 'las personas mayores de 65 quedan en el cuarto grupo')
-    ok(m.grupoEdadEspera(19) === null && m.grupoEdadEspera(65) === null, 'las edades fuera de los grupos no se asignan por error')
+    ok(m.grupoEdadEspera(19)?.id === 'adultos' && m.grupoEdadEspera(65)?.id === 'adultos', 'las edades de 19 a 65 quedan en Adultos')
+    ok(m.grupoEdadEspera(66)?.id === 'mayores-65', 'las personas mayores de 65 quedan en su propio grupo')
+    ok(m.grupoEdadEspera(5) === null, 'las edades menores de 6 no se asignan por error')
 
     const clase = datos.horarios[0]
     const persona = {
