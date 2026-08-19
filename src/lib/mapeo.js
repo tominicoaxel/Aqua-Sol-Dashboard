@@ -192,6 +192,7 @@ export function armarCrudos({
   asistencias,
   docentes = [],
   claseDocentes = [],
+  clasesDictadas = [],
   listaEspera = [],
 }) {
   const historialPorCliente = new Map()
@@ -216,6 +217,15 @@ export function armarCrudos({
     docentesPorClase.get(d.clase_id).push(d.docente_id)
   }
 
+  // Quién dio cada clase cada fecha, con la misma forma que la asistencia.
+  // Sin entrada para una fecha, la dio quien está a cargo del horario.
+  const dictados = {}
+  for (const d of clasesDictadas) {
+    if (!dictados[d.clase_id]) dictados[d.clase_id] = {}
+    if (!dictados[d.clase_id][d.fecha]) dictados[d.clase_id][d.fecha] = []
+    dictados[d.clase_id][d.fecha].push(d.docente_id)
+  }
+
   // { [claseId]: { "2026-08-11": [ids] } } — la misma forma de siempre.
   const porClase = {}
   for (const a of asistencias) {
@@ -230,6 +240,7 @@ export function armarCrudos({
       claseDesdeFila(c, participantesPorClase.get(c.id) ?? [], docentesPorClase.get(c.id) ?? []),
     ),
     asistencias: porClase,
+    dictados,
     docentes: docentes.map(docenteDesdeFila),
     listaEspera: listaEspera.map(esperaDesdeFila),
   }

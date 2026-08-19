@@ -14,7 +14,7 @@ import { crearPersistencia } from './persistencia.js'
 // SALE el estado y adónde SE GUARDA — no la lógica: las mutaciones de más abajo
 // siguen siendo las mismas funciones puras de siempre.
 
-const VACIO = { clientes: [], horarios: [], asistencias: {}, docentes: [], listaEspera: [] }
+const VACIO = { clientes: [], horarios: [], asistencias: {}, dictados: {}, docentes: [], listaEspera: [] }
 
 const nuevoId = () => globalThis.crypto.randomUUID()
 
@@ -124,8 +124,6 @@ export function conParticipanteSacado(crudos, horarioId, clienteId) {
   }
 }
 
-/** Id libre para una clase nueva. No usa Date.now() para que dos corridas con los
- *  mismos pasos den el mismo resultado y se pueda verificar. */
 /** Marca o desmarca que alguien vino a la clase de una fecha puntual.
  *
  *  La asistencia cuelga de (clase, fecha) y no de la persona: el grupo es fijo
@@ -146,6 +144,42 @@ export function conAsistenciaMarcada(crudos, claseId, fechaISO, clienteId, prese
   }
 }
 
+/** Deja constancia de quién dio la clase de una fecha puntual.
+ *
+ *  Es distinto de `clase_docentes`: eso dice quién está a cargo del horario, que
+ *  vale todas las semanas. Esto dice quién la dio ESE día — cuando la titular falta
+ *  y la cubre otra, el horario no cambia, cambia ese martes.
+ *
+ *  Sin nadie registrado para una fecha, la dio quien está a cargo: es el caso de
+ *  casi todos los días, y guardar una fila para decir "pasó lo esperable" sería
+ *  llenar la base de ruido. */
+export function conDocenteDelDiaMarcado(crudos, claseId, fechaISO, docenteId, dio) {
+  const deLaClase = crudos.dictados?.[claseId] ?? {}
+  const registrado = deLaClase[fechaISO]
+
+  // Mientras la fecha no tenga registro, la dio quien está a cargo del horario. El
+  // primer cambio sobre esa fecha tiene que asentar eso también: si no, sumar a la
+  // suplente que cubrió la segunda mitad borraría de un saque a la titular que sí
+  // dio la primera.
+  const base = registrado ?? crudos.horarios.find((h) => h.id === claseId)?.docenteIds ?? []
+  const actualizado = dio
+    ? base.includes(docenteId)
+      ? base
+      : [...base, docenteId]
+    : base.filter((id) => id !== docenteId)
+
+  // Quedarse sin nadie vuelve la fecha a "sin registro", no a "no la dio nadie".
+  // Es lo único que sobrevive la ida y vuelta a la base, donde una lista vacía y
+  // una fecha nunca tocada son la misma cosa: cero filas.
+  const nuevoDeLaClase = { ...deLaClase }
+  if (actualizado.length) nuevoDeLaClase[fechaISO] = actualizado
+  else delete nuevoDeLaClase[fechaISO]
+
+  return { ...crudos, dictados: { ...crudos.dictados, [claseId]: nuevoDeLaClase } }
+}
+
+/** Id libre para una clase nueva. No usa Date.now() para que dos corridas con los
+ *  mismos pasos den el mismo resultado y se pueda verificar. */
 export function generarIdClase(horarios) {
   const usados = new Set(horarios.map((h) => h.id))
   let n = horarios.length + 1
@@ -177,10 +211,13 @@ export function conClaseEliminada(crudos, id) {
   // una clase que ya no existe.
   const asistencias = { ...crudos.asistencias }
   delete asistencias[id]
+  const dictados = { ...crudos.dictados }
+  delete dictados[id]
   return {
     ...crudos,
     horarios: crudos.horarios.filter((h) => h.id !== id),
     asistencias,
+    dictados,
     listaEspera: (crudos.listaEspera ?? []).map((p) =>
       p.claseId === id ? { ...p, claseId: null } : p,
     ),
@@ -213,9 +250,19 @@ export function conDocenteEditado(crudos, id, cambios) {
  *  quedaban solo a su cargo pasan a "sin docente"; las que comparte con otra
  *  persona siguen a cargo de quien queda. */
 export function conDocenteEliminado(crudos, id) {
+  // También sale de lo ya dictado. Acá la base manda: `clases_dictadas` cae por
+  // cascada al borrar la docente, así que la pantalla tiene que reflejar lo mismo.
+  const dictados = {}
+  for (const [claseId, porFecha] of Object.entries(crudos.dictados ?? {})) {
+    dictados[claseId] = Object.fromEntries(
+      Object.entries(porFecha).map(([fecha, ids]) => [fecha, ids.filter((d) => d !== id)]),
+    )
+  }
+
   return {
     ...crudos,
     docentes: (crudos.docentes ?? []).filter((d) => d.id !== id),
+    dictados,
     horarios: crudos.horarios.map((h) =>
       (h.docenteIds ?? []).includes(id)
         ? { ...h, docenteIds: h.docenteIds.filter((d) => d !== id) }
@@ -408,6 +455,15 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
           (prev) => conAsistenciaMarcada(prev, claseId, fechaISO, clienteId, presente),
           () => db.marcarAsistencia(claseId, fechaISO, clienteId, presente),
         ),
+      // Se guarda la lista completa de la fecha y no el docente suelto: la mutación
+      // puede sumar de arrastre a quien estaba a cargo, y esa lista es la única que
+      // lo contempla.
+      marcarDocenteDelDia: (claseId, fechaISO, docenteId, dio) =>
+        aplicar(
+          (prev) => conDocenteDelDiaMarcado(prev, claseId, fechaISO, docenteId, dio),
+          (nuevo) =>
+            db.guardarDictadoDelDia(claseId, fechaISO, nuevo.dictados?.[claseId]?.[fechaISO] ?? []),
+        ),
       reemplazarClientes: (clientes) =>
         aplicar(
           (prev) => conClientesReemplazados(prev, clientes),
@@ -471,6 +527,7 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
       // El importador trabaja contra la forma cruda, que es la que se guarda.
       clientesCrudos: crudos.clientes,
       asistencias: crudos.asistencias ?? {},
+      dictados: crudos.dictados ?? {},
       clientePorId: (id) => porId.get(id),
       horarioPorId: (id) => horarios.find((h) => h.id === id),
       cargando,

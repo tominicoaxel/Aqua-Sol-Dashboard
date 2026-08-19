@@ -140,6 +140,122 @@ function BuscadorDeParticipantes({ clase, onAgregar, onCerrar }) {
   )
 }
 
+/** Quién dio la clase de una fecha puntual.
+ *
+ *  Separado de quién está A CARGO del horario a propósito: cuando la titular falta
+ *  y la cubre una suplente, el horario no cambia — cambia ese día. Antes había que
+ *  elegir entre reasignar el horario (y perder que la titular sigue siéndolo) o no
+ *  registrar nada (y perder quién trabajó).
+ *
+ *  Mientras no se registre a nadie, la dio quien está a cargo. Eso NO se guarda: es
+ *  lo que pasa casi todos los días, y una fila para decir "pasó lo esperable" sería
+ *  ruido. En cuanto se toca algo, lo registrado manda. */
+function QuienDioLaClase({ clase, fechaISO, fechaClase }) {
+  const { docentes, dictados, marcarDocenteDelDia, avisar } = useDatos()
+  const [eligiendo, setEligiendo] = useState(false)
+
+  const registrados = dictados?.[clase.id]?.[fechaISO] ?? []
+  const hayRegistro = registrados.length > 0
+  const porId = new Map(docentes.map((d) => [d.id, d]))
+
+  // Sin registro se muestran los del horario, en gris: es una previsión, no un hecho.
+  const mostrados = hayRegistro
+    ? registrados.map((id) => porId.get(id)).filter(Boolean)
+    : clase.docentes
+
+  const marcar = (docente, dio) => {
+    marcarDocenteDelDia(clase.id, fechaISO, docente.id, dio)
+    setEligiendo(false)
+    avisar(
+      dio
+        ? `${docente.nombre} dio ${clase.actividad} del ${formatoFecha(fechaClase)}.`
+        : `${docente.nombre} no dio ${clase.actividad} del ${formatoFecha(fechaClase)}.`,
+    )
+  }
+
+  const disponibles = docentes.filter((d) => !mostrados.some((m) => m.id === d.id))
+
+  return (
+    <div className="mb-2 rounded-2xl border border-borde bg-white px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-[11px] tracking-wide text-tinta-3 uppercase">Dio la clase</h4>
+        {!hayRegistro && clase.docentes.length > 0 && (
+          <span className="text-[11px] text-tinta-3">según el horario</span>
+        )}
+      </div>
+
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {mostrados.length === 0 && (
+          <span className="text-xs text-tinta-3">Nadie registrado todavía.</span>
+        )}
+        {mostrados.map((d) => (
+          <span
+            key={d.id}
+            className={`inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2.5 text-xs ${
+              hayRegistro
+                ? 'bg-cloro/14 text-cloro-tinta ring-1 ring-cloro/30'
+                : 'bg-agua/6 text-tinta-3 ring-1 ring-borde'
+            }`}
+          >
+            {d.nombre}
+            <button
+              type="button"
+              onClick={() => marcar(d, false)}
+              aria-label={`${d.nombre} no dio la clase del ${formatoFecha(fechaClase)}`}
+              className="grid size-5 place-items-center rounded-full transition hover:bg-error/15 hover:text-error-tinta"
+            >
+              <svg viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </button>
+          </span>
+        ))}
+
+        {disponibles.length > 0 && !eligiendo && (
+          <button
+            type="button"
+            onClick={() => setEligiendo(true)}
+            className="inline-flex min-h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-cloro-tinta ring-1 ring-cloro/40 transition hover:bg-cloro/10"
+          >
+            <svg viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M8 3.5v9M3.5 8h9" />
+            </svg>
+            Agregar docente
+          </button>
+        )}
+      </div>
+
+      {eligiendo && (
+        <ul className="anim-subir mt-2 overflow-hidden rounded-xl border border-borde">
+          {disponibles.map((d) => (
+            <li key={d.id} className="border-b border-borde-suave last:border-0">
+              <button
+                type="button"
+                onClick={() => marcar(d, true)}
+                className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-tinta transition hover:bg-cloro/8"
+              >
+                <span className="min-w-0 flex-1 truncate">{d.nombre}</span>
+                <span className="shrink-0 text-[11px] text-tinta-3">
+                  {d.rol === 'suplente' ? 'Suplente' : 'Titular'}
+                </span>
+              </button>
+            </li>
+          ))}
+          <li className="border-t border-borde-suave">
+            <button
+              type="button"
+              onClick={() => setEligiendo(false)}
+              className="min-h-11 w-full px-3 text-left text-xs text-tinta-3 transition hover:bg-agua/6"
+            >
+              Cancelar
+            </button>
+          </li>
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function ClaseDetalle({ claseId, onCerrar, onAbrirCliente }) {
   const {
     horarioPorId,
@@ -313,6 +429,8 @@ export default function ClaseDetalle({ claseId, onCerrar, onAbrirCliente }) {
             </p>
           </div>
         )}
+
+        <QuienDioLaClase clase={clase} fechaISO={fechaISO} fechaClase={fechaClase} />
 
         {clase.ocupados === 0 ? (
           <div className="rounded-2xl border border-dashed border-borde p-6 text-center">

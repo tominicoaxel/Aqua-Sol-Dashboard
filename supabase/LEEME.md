@@ -29,16 +29,18 @@ Los archivos están en `supabase/migrations/` y se aplican por fecha:
 3. [`20260812220000_lista_espera_edades.sql`](migrations/20260812220000_lista_espera_edades.sql)
 4. [`20260812223000_lista_espera_adultos.sql`](migrations/20260812223000_lista_espera_adultos.sql)
 5. [`20260819100000_varios_docentes_por_clase.sql`](migrations/20260819100000_varios_docentes_por_clase.sql)
+6. [`20260819140000_quien_dio_la_clase.sql`](migrations/20260819140000_quien_dio_la_clase.sql)
 
 Si el proyecto ya estaba funcionando, ejecutá solamente las migraciones nuevas que
 todavía no aplicaste, siempre en ese orden. La segunda crea Docentes y Lista de
 espera; la tercera agrega la edad necesaria para separar esa lista por grupos.
 La cuarta habilita el grupo Adultos, de 19 a 65 años. La quinta permite que una
-clase tenga VARIOS docentes a cargo a la vez.
+clase tenga VARIOS docentes a cargo a la vez. La sexta agrega el registro de quién
+dio la clase CADA FECHA, para poder anotar las suplencias sin cambiar el horario.
 
-> La quinta hay que aplicarla **antes** de publicar la app, no después: la pantalla
-> lee la tabla `clase_docentes` desde el arranque y sin ella no carga nada.
-> Las asignaciones que ya existían se conservan solas.
+> La quinta y la sexta hay que aplicarlas **antes** de publicar la app, no después:
+> la pantalla lee `clase_docentes` y `clases_dictadas` desde el arranque y sin ellas
+> no carga nada. Las asignaciones que ya existían se conservan solas.
 
 **Camino corto (recomendado):**
 
@@ -46,7 +48,7 @@ clase tenga VARIOS docentes a cargo a la vez.
    PowerShell y desde la carpeta del proyecto:
 
    ```powershell
-   Get-Content "supabase\migrations\20260819100000_varios_docentes_por_clase.sql" -Raw | Set-Clipboard
+   Get-Content "supabase\migrations\20260819140000_quien_dio_la_clase.sql" -Raw | Set-Clipboard
    ```
 
 2. En el panel de Supabase: **SQL Editor** → **New query** → pegá → **Run**
@@ -54,9 +56,9 @@ clase tenga VARIOS docentes a cargo a la vez.
 3. Tiene que decir **Success. No rows returned**. Si tira error, copiame el mensaje
    tal cual.
 
-**Cómo saber que quedó bien:** andá a **Table Editor**. Tienen que estar las ocho
+**Cómo saber que quedó bien:** andá a **Table Editor**. Tienen que estar las nueve
 tablas — `clientes`, `clases`, `participantes`, `pagos`, `asistencias`, `docentes`,
-`clase_docentes`, `lista_espera` — y cada una
+`clase_docentes`, `clases_dictadas`, `lista_espera` — y cada una
 con un cartelito verde que dice **RLS enabled**. Si alguna dice "RLS disabled" o
 sale un banner rojo de "unrestricted", avisame: sin RLS los datos quedan a la vista
 de cualquiera que tenga la URL.

@@ -16,7 +16,7 @@ const ok = (cond, texto) => {
   if (!cond) fallas++
 }
 
-const TABLAS = ['clientes', 'clases', 'participantes', 'pagos', 'asistencias', 'docentes', 'clase_docentes', 'lista_espera']
+const TABLAS = ['clientes', 'clases', 'participantes', 'pagos', 'asistencias', 'docentes', 'clase_docentes', 'clases_dictadas', 'lista_espera']
 
 // Rango alto y prefijo propio para no pisarle nada a los datos reales.
 const marca = Date.now().toString().slice(-6)

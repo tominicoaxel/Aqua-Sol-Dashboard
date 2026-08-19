@@ -30,8 +30,10 @@ export function crearPersistencia(usuarioId) {
   // Las cinco tablas en paralelo: son consultas chicas e independientes, y en
   // serie el arranque tardaría cinco viajes en vez de uno.
   async function cargarTodo() {
-    const [clientes, clases, participantes, pagos, asistencias, docentes, claseDocentes, listaEspera] =
-      await Promise.all([
+    const [
+      clientes, clases, participantes, pagos, asistencias, docentes, claseDocentes, clasesDictadas,
+      listaEspera,
+    ] = await Promise.all([
         supabase.from('clientes').select('*').order('nombre').then(oExplota),
         supabase.from('clases').select('*').order('dia').order('hora').then(oExplota),
         supabase.from('participantes').select('*').then(oExplota),
@@ -39,10 +41,12 @@ export function crearPersistencia(usuarioId) {
         supabase.from('asistencias').select('*').then(oExplota),
         supabase.from('docentes').select('*').order('rol').order('nombre').then(oExplota),
         supabase.from('clase_docentes').select('*').then(oExplota),
+        supabase.from('clases_dictadas').select('*').then(oExplota),
         supabase.from('lista_espera').select('*').order('fecha_solicitud').then(oExplota),
       ])
     return armarCrudos({
-      clientes, clases, participantes, pagos, asistencias, docentes, claseDocentes, listaEspera,
+      clientes, clases, participantes, pagos, asistencias, docentes, claseDocentes, clasesDictadas,
+      listaEspera,
     })
   }
 
@@ -210,6 +214,24 @@ export function crearPersistencia(usuarioId) {
   // ── Asistencia ───────────────────────────────────────────────────────────
   /** Se guarda solo a quien vino: marcar es insertar, desmarcar es borrar. No hay
    *  fila que diga "faltó" — el que no está, no vino. */
+  /** Deja constancia de quiénes dieron la clase de una fecha. Se reemplaza la fecha
+   *  entera y no la fila suelta: son una o dos filas, y sumar a una suplente puede
+   *  arrastrar también a la titular que estaba a cargo. Sin filas, la dio quien
+   *  figura en el horario. */
+  async function guardarDictadoDelDia(claseId, fechaISO, docenteIds) {
+    await supabase
+      .from('clases_dictadas')
+      .delete()
+      .eq('clase_id', claseId)
+      .eq('fecha', fechaISO)
+      .then(oExplota)
+    if (!docenteIds.length) return
+    await supabase
+      .from('clases_dictadas')
+      .insert(docenteIds.map((id) => ({ clase_id: claseId, fecha: fechaISO, docente_id: id })))
+      .then(oExplota)
+  }
+
   async function marcarAsistencia(claseId, fechaISO, clienteId, presente) {
     if (presente) {
       await supabase
@@ -265,6 +287,7 @@ export function crearPersistencia(usuarioId) {
     editarEnEspera,
     eliminarDeEspera,
     marcarAsistencia,
+    guardarDictadoDelDia,
     guardarClientes,
   }
 }

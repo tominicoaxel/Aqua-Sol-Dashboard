@@ -454,6 +454,58 @@ try {
     )
   }
 
+  console.log('')
+  console.log('-- 16b. Quien dio la clase cada fecha -----------------------')
+  {
+    const suplente = {
+      id: 'doc-suplencia', nombre: 'Rita Suplente', telefono: '11 5555-7777',
+      email: 'rita@example.com', rol: 'suplente',
+    }
+    let ensayo = m.conDocenteCreado(datos, suplente)
+    const clase = ensayo.horarios[0]
+    const titular = clase.docenteIds[0]
+    const FECHA = '2026-08-11'
+    const OTRA = '2026-08-18'
+    const dictado = (e, fecha = FECHA) => e.dictados?.[clase.id]?.[fecha]
+
+    ok(dictado(ensayo) === undefined, 'una fecha sin tocar no guarda nada: la dio quien esta a cargo')
+
+    // El caso que motivo todo: falta la titular y la cubre otra.
+    ensayo = m.conDocenteDelDiaMarcado(ensayo, clase.id, FECHA, suplente.id, true)
+    ok(dictado(ensayo).includes(suplente.id), 'se puede registrar que la dio una suplente')
+    ok(dictado(ensayo).includes(titular), 'y queda asentada tambien la titular, que no se pierde')
+
+    ensayo = m.conDocenteDelDiaMarcado(ensayo, clase.id, FECHA, titular, false)
+    ok(!dictado(ensayo).includes(titular), 'si la titular falto, se la saca de esa fecha')
+    ok(dictado(ensayo).includes(suplente.id), 'y queda registrado que la dio solo la suplente')
+
+    ok(clase.docenteIds.includes(titular), 'la suplencia NO cambia quien esta a cargo del horario')
+    ok(dictado(ensayo, OTRA) === undefined, 'y no toca ninguna otra fecha')
+
+    ensayo = m.conDocenteDelDiaMarcado(ensayo, clase.id, FECHA, suplente.id, true)
+    ok(dictado(ensayo).length === 1, 'registrar dos veces a la misma no la duplica')
+
+    ensayo = m.conDocenteDelDiaMarcado(ensayo, clase.id, FECHA, suplente.id, false)
+    ok(dictado(ensayo) === undefined, 'quedarse sin nadie vuelve la fecha a sin registro')
+
+    // Borrar a la docente se lleva lo dictado, igual que la cascada de la base.
+    let conRegistro = m.conDocenteDelDiaMarcado(
+      m.conDocenteCreado(datos, suplente), clase.id, FECHA, suplente.id, true,
+    )
+    conRegistro = m.conDocenteEliminado(conRegistro, suplente.id)
+    ok(
+      !(conRegistro.dictados?.[clase.id]?.[FECHA] ?? []).includes(suplente.id),
+      'eliminar a una docente la saca tambien de las clases que ya habia dado',
+    )
+
+    // Y borrar la clase se lleva su registro, igual que se lleva la asistencia.
+    const sinClase = m.conClaseEliminada(
+      m.conDocenteDelDiaMarcado(m.conDocenteCreado(datos, suplente), clase.id, FECHA, suplente.id, true),
+      clase.id,
+    )
+    ok(sinClase.dictados[clase.id] === undefined, 'eliminar la clase se lleva su registro de dictado')
+  }
+
   console.log('\n── 17. Gestión de la lista de espera ────────────────────────')
   {
     ok(m.grupoEdadEspera(6)?.id === '6-8' && m.grupoEdadEspera(8)?.id === '6-8', 'las edades de 6 a 8 quedan en el primer grupo')
