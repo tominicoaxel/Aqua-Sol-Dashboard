@@ -34,7 +34,9 @@ try {
       for (const p of h.participantes) if (!ids.has(p)) huerfanos++
       if (new Set(h.participantes).size !== h.participantes.length) duplicados++
       if (h.ocupados !== h.grupo.length) descuadres++
-      if (h.docenteId && !(crudos.docentes ?? []).some((d) => d.id === h.docenteId)) docentesHuerfanos++
+      for (const id of h.docenteIds ?? []) {
+        if (!(crudos.docentes ?? []).some((d) => d.id === id)) docentesHuerfanos++
+      }
     }
     for (const p of crudos.listaEspera ?? []) {
       if (p.claseId && !crudos.horarios.some((h) => h.id === p.claseId)) esperasHuerfanas++
@@ -173,7 +175,7 @@ try {
     const antes = m.derivar(datos).horarios.length
     datos = m.conClaseCreada(datos, {
       actividad: 'Aquagym Senior', dia: 3, hora: '15:00',
-      profe: datos.docentes[0].nombre, docenteId: datos.docentes[0].id, cupo: 5, duracion: 45,
+      docenteIds: [datos.docentes[0].id], cupo: 5, duracion: 45,
     })
     let d = integridad(datos, 'tras crear la clase')
     ok(d.horarios.length === antes + 1, `la grilla pasó de ${antes} a ${d.horarios.length} clases`)
@@ -403,23 +405,53 @@ try {
     ok(ensayo.docentes.some((d) => d.id === docente.id), 'se puede dar de alta una docente suplente')
 
     const clase = ensayo.horarios[0]
-    ensayo = m.conClaseEditada(ensayo, clase.id, { docenteId: docente.id, profe: docente.nombre })
-    let horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
-    ok(horario.docenteId === docente.id && horario.profe === docente.nombre, 'la clase queda vinculada a la docente elegida')
+    const yaEstaba = clase.docenteIds[0]
+    const leer = (e) => m.derivar(e).horarios.find((h) => h.id === clase.id)
 
-    ensayo = m.conClaseEditada(ensayo, clase.id, { docenteId: null, profe: '' })
-    horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
-    ok(horario.docenteId === null && /sin docente/i.test(horario.profe), 'también se puede quitar una clase sin eliminar el horario')
+    ensayo = m.conDocenteEnClase(ensayo, clase.id, docente.id, true)
+    let horario = leer(ensayo)
+    ok(horario.docenteIds.includes(docente.id), 'la clase queda vinculada a la docente elegida')
 
-    ensayo = m.conClaseEditada(ensayo, clase.id, { docenteId: docente.id, profe: docente.nombre })
+    // Lo que antes no se podía: sumar a alguien sin desplazar a quien ya estaba.
+    ok(horario.docenteIds.includes(yaEstaba), 'sumar a una docente NO saca a la que ya estaba')
+    ok(horario.docentes.length === 2, 'la clase queda a cargo de las dos')
+    ok(
+      horario.profe.includes(docente.nombre) && horario.profe.includes(clase.profe.split(',')[0]),
+      'el nombre a cargo nombra a todas',
+    )
+
+    ensayo = m.conDocenteEnClase(ensayo, clase.id, docente.id, false)
+    horario = leer(ensayo)
+    ok(!horario.docenteIds.includes(docente.id), 'también se puede sacar sin eliminar el horario')
+    ok(horario.docenteIds.includes(yaEstaba), 'sacar a una no toca al resto del equipo')
+
+    // Repetir la misma asignación no la duplica: la clave primaria de la base es
+    // (clase, docente) y la mutación pura tiene que respetar lo mismo.
+    ensayo = m.conDocenteEnClase(ensayo, clase.id, docente.id, true)
+    ensayo = m.conDocenteEnClase(ensayo, clase.id, docente.id, true)
+    horario = leer(ensayo)
+    ok(
+      horario.docenteIds.filter((id) => id === docente.id).length === 1,
+      'asignar dos veces a la misma docente no la duplica',
+    )
 
     ensayo = m.conDocenteEditado(ensayo, docente.id, { ...docente, nombre: 'Ana Gómez' })
-    horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
-    ok(horario.profe === 'Ana Gómez', 'renombrar a la docente se refleja en sus clases')
+    horario = leer(ensayo)
+    ok(horario.profe.includes('Ana Gómez'), 'renombrar a la docente se refleja en sus clases')
 
     ensayo = m.conDocenteEliminado(ensayo, docente.id)
-    horario = m.derivar(ensayo).horarios.find((h) => h.id === clase.id)
-    ok(horario.docenteId === null && /sin docente/i.test(horario.profe), 'al eliminarla, la clase queda explícitamente sin asignar')
+    horario = leer(ensayo)
+    ok(!horario.docenteIds.includes(docente.id), 'al eliminarla, sale de todas sus clases')
+    ok(horario.docenteIds.includes(yaEstaba), 'y las que compartía siguen a cargo de quien queda')
+
+    const sola = m.conDocenteEnClase(
+      m.conDocenteEnClase(ensayo, clase.id, yaEstaba, false),
+      clase.id, docente.id, false,
+    )
+    ok(
+      /sin docente/i.test(leer(sola).profe),
+      'una clase sin nadie a cargo lo dice explícitamente',
+    )
   }
 
   console.log('\n── 17. Gestión de la lista de espera ────────────────────────')

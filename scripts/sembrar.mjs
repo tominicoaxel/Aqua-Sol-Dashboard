@@ -16,7 +16,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { credencialesSupabase, haySesionDePrueba } from '../verificacion/entorno.mjs'
 import { datosDeEjemplo } from '../verificacion/semilla/index.js'
-import { filaDesdeClase, filaDesdeCliente, filaDesdePago } from '../src/lib/mapeo.js'
+import { filaDesdeClase, filaDesdeCliente, filaDesdeDocente, filaDesdePago } from '../src/lib/mapeo.js'
 import { aISO, ocurrenciaMasReciente } from '../src/lib/fechas.js'
 
 const limpiar = process.argv.includes('--limpiar')
@@ -64,10 +64,11 @@ if (limpiar) {
   await db.from('participantes').delete().gte('cliente_id', 0).then(oExplota('borrar participantes'))
   await db.from('pagos').delete().eq('usuario_id', usuarioId).then(oExplota('borrar pagos'))
   await db.from('clases').delete().eq('usuario_id', usuarioId).then(oExplota('borrar clases'))
+  await db.from('docentes').delete().eq('usuario_id', usuarioId).then(oExplota('borrar docentes'))
   await db.from('clientes').delete().eq('usuario_id', usuarioId).then(oExplota('borrar clientes'))
 }
 
-const { clientes, horarios } = datosDeEjemplo()
+const { clientes, horarios, docentes } = datosDeEjemplo()
 
 // ── Clientes ────────────────────────────────────────────────────────────────
 await db
@@ -88,6 +89,14 @@ const delMes = pagos.filter((p) => p.fecha.slice(0, 7) === aISO(new Date()).slic
 const total = delMes.reduce((s, p) => s + p.importe, 0)
 console.log(`  ${pagos.length} pagos (${delMes.length} de este mes, $${total.toLocaleString('es-AR')})`)
 
+// ── Docentes ────────────────────────────────────────────────────────────────
+// Van antes que las clases: `clase_docentes` apunta acá.
+await db
+  .from('docentes')
+  .insert(docentes.map((d) => ({ usuario_id: usuarioId, ...filaDesdeDocente(d) })))
+  .then(oExplota('docentes'))
+console.log(`  ${docentes.length} docentes`)
+
 // ── Clases ──────────────────────────────────────────────────────────────────
 await db
   .from('clases')
@@ -98,6 +107,13 @@ const participantes = horarios.flatMap((h) =>
   h.participantes.map((clienteId) => ({ clase_id: h.id, cliente_id: clienteId })),
 )
 await db.from('participantes').insert(participantes).then(oExplota('participantes'))
+
+// Quién está a cargo también es una tabla de cruce: una clase puede tener varias.
+const aCargo = horarios.flatMap((h) =>
+  (h.docenteIds ?? []).map((docenteId) => ({ clase_id: h.id, docente_id: docenteId })),
+)
+await db.from('clase_docentes').insert(aCargo).then(oExplota('clase_docentes'))
+console.log(`  ${aCargo.length} asignaciones de docente`)
 console.log(`  ${horarios.length} clases con ${participantes.length} inscripciones`)
 
 // ── Asistencia ──────────────────────────────────────────────────────────────

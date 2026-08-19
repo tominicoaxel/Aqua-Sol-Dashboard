@@ -5,3 +5,6 @@ dist
 .env
 .env.local
 .env.*.local
+
+# La planilla real: nombres y teléfonos de las alumnas. No se versiona.
+/*.xlsx

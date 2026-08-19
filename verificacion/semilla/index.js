@@ -12,17 +12,19 @@ import { horarios } from './mockHorarios.js'
 // dos meses estarían todos vencidos y media verificación dejaría de probar nada.
 
 export function datosDeEjemplo() {
+  // Los ids son uuid porque la columna lo es, y son fijos para que el mismo
+  // sembrado dé siempre la misma foto.
   const docentes = [
-    { id: 'doc-paula', nombre: 'Paula Ríos', telefono: '11 4000-1001', email: 'paula@aquasol.com', rol: 'titular' },
-    { id: 'doc-diego', nombre: 'Diego Ferrari', telefono: '11 4000-1002', email: 'diego@aquasol.com', rol: 'titular' },
-    { id: 'doc-sol', nombre: 'Sol Medina', telefono: '11 4000-1003', email: 'sol@aquasol.com', rol: 'titular' },
-    { id: 'doc-marcos', nombre: 'Marcos Leiva', telefono: '11 4000-1004', email: 'marcos@aquasol.com', rol: 'titular' },
-    { id: 'doc-lucia', nombre: 'Lucía Gómez', telefono: '11 4000-1005', email: 'lucia@aquasol.com', rol: 'suplente' },
+    { id: '5eed0000-0000-4000-8000-000000000001', nombre: 'Paula Ríos', telefono: '11 4000-1001', email: 'paula@aquasol.com', rol: 'titular' },
+    { id: '5eed0000-0000-4000-8000-000000000002', nombre: 'Diego Ferrari', telefono: '11 4000-1002', email: 'diego@aquasol.com', rol: 'titular' },
+    { id: '5eed0000-0000-4000-8000-000000000003', nombre: 'Sol Medina', telefono: '11 4000-1003', email: 'sol@aquasol.com', rol: 'titular' },
+    { id: '5eed0000-0000-4000-8000-000000000004', nombre: 'Marcos Leiva', telefono: '11 4000-1004', email: 'marcos@aquasol.com', rol: 'titular' },
+    { id: '5eed0000-0000-4000-8000-000000000005', nombre: 'Lucía Gómez', telefono: '11 4000-1005', email: 'lucia@aquasol.com', rol: 'suplente' },
   ]
   const docentePorNombre = new Map(docentes.map((d) => [d.nombre, d.id]))
   const horariosConDocente = structuredClone(horarios).map((h) => ({
     ...h,
-    docenteId: docentePorNombre.get(h.profe) ?? null,
+    docenteIds: [docentePorNombre.get(h.profe)].filter(Boolean),
   }))
 
   return {

@@ -30,16 +30,20 @@ export function crearPersistencia(usuarioId) {
   // Las cinco tablas en paralelo: son consultas chicas e independientes, y en
   // serie el arranque tardaría cinco viajes en vez de uno.
   async function cargarTodo() {
-    const [clientes, clases, participantes, pagos, asistencias, docentes, listaEspera] = await Promise.all([
-      supabase.from('clientes').select('*').order('nombre').then(oExplota),
-      supabase.from('clases').select('*').order('dia').order('hora').then(oExplota),
-      supabase.from('participantes').select('*').then(oExplota),
-      supabase.from('pagos').select('*').order('fecha', { ascending: false }).then(oExplota),
-      supabase.from('asistencias').select('*').then(oExplota),
-      supabase.from('docentes').select('*').order('rol').order('nombre').then(oExplota),
-      supabase.from('lista_espera').select('*').order('fecha_solicitud').then(oExplota),
-    ])
-    return armarCrudos({ clientes, clases, participantes, pagos, asistencias, docentes, listaEspera })
+    const [clientes, clases, participantes, pagos, asistencias, docentes, claseDocentes, listaEspera] =
+      await Promise.all([
+        supabase.from('clientes').select('*').order('nombre').then(oExplota),
+        supabase.from('clases').select('*').order('dia').order('hora').then(oExplota),
+        supabase.from('participantes').select('*').then(oExplota),
+        supabase.from('pagos').select('*').order('fecha', { ascending: false }).then(oExplota),
+        supabase.from('asistencias').select('*').then(oExplota),
+        supabase.from('docentes').select('*').order('rol').order('nombre').then(oExplota),
+        supabase.from('clase_docentes').select('*').then(oExplota),
+        supabase.from('lista_espera').select('*').order('fecha_solicitud').then(oExplota),
+      ])
+    return armarCrudos({
+      clientes, clases, participantes, pagos, asistencias, docentes, claseDocentes, listaEspera,
+    })
   }
 
   // ── Pagos ────────────────────────────────────────────────────────────────
@@ -135,10 +139,30 @@ export function crearPersistencia(usuarioId) {
       .from('clases')
       .insert({ usuario_id: usuarioId, ...filaDesdeClase(clase) })
       .then(oExplota)
+    await guardarDocentesDeClase(clase.id, clase.docenteIds ?? [])
   }
 
   async function editarClase(id, cambios) {
-    await supabase.from('clases').update(cambiosDeClase(cambios)).eq('id', id).then(oExplota)
+    const columnas = cambiosDeClase(cambios)
+    // Un `update` sin campos es un viaje al servidor para no cambiar nada: pasa
+    // cada vez que solo se suma o se saca a una docente.
+    if (Object.keys(columnas).length) {
+      await supabase.from('clases').update(columnas).eq('id', id).then(oExplota)
+    }
+    if ('docenteIds' in cambios) await guardarDocentesDeClase(id, cambios.docenteIds ?? [])
+  }
+
+  /** El equipo a cargo de una clase se reemplaza entero: son dos o tres filas, y
+   *  calcular el diff acá sería repetir en el cliente lo que la clave primaria
+   *  compuesta ya garantiza. Se borra primero para que sacar a alguien funcione
+   *  igual que sumarlo. */
+  async function guardarDocentesDeClase(claseId, docenteIds) {
+    await supabase.from('clase_docentes').delete().eq('clase_id', claseId).then(oExplota)
+    if (!docenteIds.length) return
+    await supabase
+      .from('clase_docentes')
+      .insert(docenteIds.map((docenteId) => ({ clase_id: claseId, docente_id: docenteId })))
+      .then(oExplota)
   }
 
   /** Se lleva participantes y asistencias por cascada, definida en la migración.

@@ -79,7 +79,8 @@ function GestionClases({ docente, horarios, onAsignar, onQuitar, onCerrar }) {
             Clases de {docente.nombre}
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-tinta-3">
-            Podés asignar clases libres, quitarlas o transferirlas desde otro docente.
+            Podés sumarla a cualquier clase o sacarla. Una clase puede tener varios
+            docentes a la vez: sumar a alguien no desplaza a quien ya estaba.
             Crear o eliminar el horario completo se hace desde Horarios.
           </p>
         </div>
@@ -93,15 +94,23 @@ function GestionClases({ docente, horarios, onAsignar, onQuitar, onCerrar }) {
       ) : (
         <ul className="mt-4 divide-y divide-borde-suave overflow-hidden rounded-xl border border-borde">
           {clases.map((clase) => {
-            const propia = clase.docenteId === docente.id
-            const asignadaAOtro = Boolean(clase.docenteId && !propia)
+            const propia = clase.docenteIds.includes(docente.id)
+            const acompañan = clase.docentes.filter((d) => d.id !== docente.id)
+            const nombres = acompañan.map((d) => d.nombre).join(', ')
+            const aCargo = propia
+              ? acompañan.length
+                ? `A su cargo, con ${nombres}`
+                : 'A su cargo'
+              : acompañan.length
+                ? `A cargo de ${nombres}`
+                : 'Sin docente'
             return (
               <li key={clase.id} className="flex flex-wrap items-center gap-3 bg-white px-3 py-2.5">
                 <span className="dato w-12 shrink-0 text-sm font-medium text-agua">{clase.hora}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-tinta">{clase.actividad}</span>
                   <span className="block text-[11px] capitalize text-tinta-3">
-                    {nombreDia(clase.dia)} · {propia ? 'A su cargo' : asignadaAOtro ? `A cargo de ${clase.profe}` : 'Sin docente'}
+                    {nombreDia(clase.dia)} · {aCargo}
                   </span>
                 </span>
                 {propia ? (
@@ -118,9 +127,9 @@ function GestionClases({ docente, horarios, onAsignar, onQuitar, onCerrar }) {
                     type="button"
                     onClick={() => onAsignar(clase)}
                     className="min-h-11 rounded-lg px-3 text-xs font-medium text-cloro-tinta transition hover:bg-cloro/10"
-                    aria-label={`${asignadaAOtro ? 'Transferir' : 'Asignar'} ${clase.actividad} a ${docente.nombre}`}
+                    aria-label={`Sumar a ${docente.nombre} a ${clase.actividad} de ${nombreDia(clase.dia)}`}
                   >
-                    {asignadaAOtro ? 'Transferir' : 'Asignar'}
+                    Sumar
                   </button>
                 )}
               </li>
@@ -211,7 +220,8 @@ function TarjetaDocente({ docente, onEditar, onGestionar, onEliminar, onCancelar
 }
 
 export default function DocentesPanel({ onAbrirClase }) {
-  const { docentes, horarios, crearDocente, editarDocente, eliminarDocente, editarClase, avisar } = useDatos()
+  const { docentes, horarios, crearDocente, editarDocente, eliminarDocente, cambiarDocenteDeClase, avisar } =
+    useDatos()
   const [formulario, setFormulario] = useState(null)
   const [eliminando, setEliminando] = useState(null)
   const [gestionandoId, setGestionandoId] = useState(null)
@@ -238,18 +248,23 @@ export default function DocentesPanel({ onAbrirClase }) {
   const docenteGestionando = docentes.find((d) => d.id === gestionandoId) ?? null
 
   const asignarClase = (clase) => {
-    const anterior = clase.docenteId ? docentes.find((d) => d.id === clase.docenteId) : null
-    editarClase(clase.id, { docenteId: docenteGestionando.id, profe: docenteGestionando.nombre })
+    cambiarDocenteDeClase(clase.id, docenteGestionando.id, true)
+    const yaEstaban = clase.docentes.length
     avisar(
-      anterior
-        ? `${clase.actividad} pasó de ${anterior.nombre} a ${docenteGestionando.nombre}.`
+      yaEstaban
+        ? `Sumaste a ${docenteGestionando.nombre} a ${clase.actividad}. Ahora está a cargo de ${yaEstaban + 1}.`
         : `Asignaste ${clase.actividad} a ${docenteGestionando.nombre}.`,
     )
   }
 
   const quitarClase = (clase) => {
-    editarClase(clase.id, { docenteId: null, profe: '' })
-    avisar(`Quitaste ${clase.actividad} de ${docenteGestionando.nombre}. La clase quedó sin docente.`)
+    cambiarDocenteDeClase(clase.id, docenteGestionando.id, false)
+    const quedan = clase.docentes.filter((d) => d.id !== docenteGestionando.id)
+    avisar(
+      quedan.length
+        ? `Sacaste a ${docenteGestionando.nombre} de ${clase.actividad}. Queda a cargo de ${quedan.map((d) => d.nombre).join(', ')}.`
+        : `Quitaste ${clase.actividad} de ${docenteGestionando.nombre}. La clase quedó sin docente.`,
+    )
   }
 
   const titulares = docentes.filter((d) => d.rol === 'titular').length

@@ -141,7 +141,7 @@ export function filaDesdeEspera(persona) {
 
 // ── Clases ──────────────────────────────────────────────────────────────────
 
-export function claseDesdeFila(fila, participantes = []) {
+export function claseDesdeFila(fila, participantes = [], docenteIds = []) {
   return {
     id: fila.id,
     dia: fila.dia,
@@ -149,20 +149,19 @@ export function claseDesdeFila(fila, participantes = []) {
     duracion: fila.duracion,
     actividad: fila.actividad,
     profe: fila.profe ?? '',
-    docenteId: fila.docente_id ?? null,
+    docenteIds,
     cupo: fila.cupo,
     participantes,
   }
 }
 
-/** `participantes` no viaja: es su propia tabla, y el cupo ocupado se cuenta
- *  desde ahí. Un contador guardado se desincroniza al primer borrado. */
+/** Ni `participantes` ni `docenteIds` viajan: cada uno es su propia tabla de cruce,
+ *  y el cupo ocupado se cuenta desde ahí. Un contador guardado se desincroniza al
+ *  primer borrado. */
 export function filaDesdeClase(clase) {
   return {
     id: clase.id,
     actividad: clase.actividad,
-    profe: clase.profe ?? '',
-    docente_id: clase.docenteId || null,
     dia: clase.dia,
     hora: clase.hora,
     duracion: clase.duracion ?? 45,
@@ -170,13 +169,13 @@ export function filaDesdeClase(clase) {
   }
 }
 
-/** Los campos de una clase que sí son columnas. Filtra `participantes` y cualquier
- *  cosa derivada que se haya colado en el objeto. */
+/** Los campos de una clase que sí son columnas. Filtra `participantes`,
+ *  `docenteIds` y cualquier cosa derivada que se haya colado en el objeto: los dos
+ *  primeros se guardan en su tabla de cruce, no acá. */
 export function cambiosDeClase(cambios) {
-  const columnas = ['actividad', 'profe', 'dia', 'hora', 'duracion', 'cupo']
+  const columnas = ['actividad', 'dia', 'hora', 'duracion', 'cupo']
   const fila = {}
   for (const c of columnas) if (c in cambios) fila[c] = cambios[c]
-  if ('docenteId' in cambios) fila.docente_id = cambios.docenteId || null
   return fila
 }
 
@@ -192,6 +191,7 @@ export function armarCrudos({
   pagos,
   asistencias,
   docentes = [],
+  claseDocentes = [],
   listaEspera = [],
 }) {
   const historialPorCliente = new Map()
@@ -210,6 +210,12 @@ export function armarCrudos({
     participantesPorClase.get(p.clase_id).push(p.cliente_id)
   }
 
+  const docentesPorClase = new Map()
+  for (const d of claseDocentes) {
+    if (!docentesPorClase.has(d.clase_id)) docentesPorClase.set(d.clase_id, [])
+    docentesPorClase.get(d.clase_id).push(d.docente_id)
+  }
+
   // { [claseId]: { "2026-08-11": [ids] } } — la misma forma de siempre.
   const porClase = {}
   for (const a of asistencias) {
@@ -220,7 +226,9 @@ export function armarCrudos({
 
   return {
     clientes: clientes.map((c) => clienteDesdeFila(c, historialPorCliente.get(c.id) ?? [])),
-    horarios: clases.map((c) => claseDesdeFila(c, participantesPorClase.get(c.id) ?? [])),
+    horarios: clases.map((c) =>
+      claseDesdeFila(c, participantesPorClase.get(c.id) ?? [], docentesPorClase.get(c.id) ?? []),
+    ),
     asistencias: porClase,
     docentes: docentes.map(docenteDesdeFila),
     listaEspera: listaEspera.map(esperaDesdeFila),

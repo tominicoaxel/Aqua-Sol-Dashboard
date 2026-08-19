@@ -93,8 +93,8 @@ try {
     local = store.conDocenteCreado(local, docente)
     await db.crearDocente(docente)
     local = store.conClaseCreada(local, {
-      actividad: 'Ensayo', dia: 4, hora: '07:30', profe: docente.nombre,
-      docenteId: docente.id, cupo: 3, duracion: 40,
+      actividad: 'Ensayo', dia: 4, hora: '07:30',
+      docenteIds: [docente.id], cupo: 3, duracion: 40,
     })
     // `conClaseCreada` genera 'clase-1'; acá hace falta el id del ensayo.
     local.horarios[0].id = CLASE
@@ -179,7 +179,7 @@ try {
 
     const clase = base.horarios[0]
     ok(clase.actividad === 'Ensayo' && clase.hora === '07:30', `la clase vuelve igual (${clase.hora})`)
-    ok(clase.docenteId === DOCENTE, 'la clase conserva su docente a cargo')
+    ok(clase.docenteIds.includes(DOCENTE), 'la clase conserva su docente a cargo')
     ok(clase.cupo === 3 && clase.duracion === 40, 'con su cupo y su duración')
     ok(clase.participantes.length === 2, `con los dos anotados (${clase.participantes.length})`)
     ok(base.asistencias[CLASE]?.[FECHA]?.length === 1, 'y con la asistencia de ese día')

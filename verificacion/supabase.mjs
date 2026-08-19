@@ -16,7 +16,7 @@ const ok = (cond, texto) => {
   if (!cond) fallas++
 }
 
-const TABLAS = ['clientes', 'clases', 'participantes', 'pagos', 'asistencias', 'docentes', 'lista_espera']
+const TABLAS = ['clientes', 'clases', 'participantes', 'pagos', 'asistencias', 'docentes', 'clase_docentes', 'lista_espera']
 
 // Rango alto y prefijo propio para no pisarle nada a los datos reales.
 const marca = Date.now().toString().slice(-6)
@@ -193,9 +193,12 @@ try {
 
     await db.from('clases').insert({
       id: ID_CLASE, usuario_id: usuarioId, actividad: 'Verificación',
-      profe: 'Docente Verificación', docente_id: ID_DOCENTE,
       dia: 3, hora: '09:00', duracion: 40, cupo: 4,
     })
+    const { error: errorCruce } = await db
+      .from('clase_docentes')
+      .insert({ clase_id: ID_CLASE, docente_id: ID_DOCENTE })
+    ok(!errorCruce, `una clase puede tener docentes a cargo${errorCruce ? ` (${errorCruce.message})` : ''}`)
     const { error: errorEspera } = await db.from('lista_espera').insert({
       id: ID_ESPERA, usuario_id: usuarioId, nombre: 'Persona Esperando',
       edad: 8, telefono: '11 5555-2222', clase_id: ID_CLASE, fecha_solicitud: '2026-08-12',

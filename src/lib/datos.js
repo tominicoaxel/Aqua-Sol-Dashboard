@@ -32,14 +32,25 @@ export function derivarClientes(crudos) {
 
 export function derivarHorarios(crudos, porId, docentesPorId = new Map()) {
   return crudos.map((h) => {
-    const docente = docentesPorId.get(h.docenteId)
+    // Una clase puede estar a cargo de varias personas. El orden en que se pintan
+    // es el de la lista de docentes, no el de asignación: así el mismo grupo se lee
+    // siempre igual aunque se sume a alguien a mitad de año.
+    const docentes = (h.docenteIds ?? [])
+      .map((id) => docentesPorId.get(id))
+      .filter(Boolean)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
     // Los datos de verificación anteriores a la tabla de docentes no traen la
-    // propiedad. En los datos nuevos, un id nulo sí significa "sin asignar".
-    const nombreDocente = docente?.nombre ?? (!('docenteId' in h) ? h.profe : 'Sin docente asignado')
+    // propiedad. En los datos nuevos, una lista vacía sí significa "sin asignar".
+    const nombreDocente = docentes.length
+      ? docentes.map((d) => d.nombre).join(', ')
+      : !('docenteIds' in h)
+        ? h.profe
+        : 'Sin docente asignado'
     return {
       ...h,
+      docenteIds: h.docenteIds ?? [],
       profe: nombreDocente,
-      docente: docente ?? null,
+      docentes,
       ocupados: h.participantes.length,
       lleno: h.participantes.length >= h.cupo,
       grupo: h.participantes.map((id) => porId.get(id)).filter(Boolean),

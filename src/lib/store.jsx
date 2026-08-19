@@ -156,7 +156,10 @@ export function generarIdClase(horarios) {
 export function conClaseCreada(crudos, datos) {
   return {
     ...crudos,
-    horarios: [...crudos.horarios, { id: generarIdClase(crudos.horarios), participantes: [], ...datos }],
+    horarios: [
+      ...crudos.horarios,
+      { id: generarIdClase(crudos.horarios), participantes: [], docenteIds: [], ...datos },
+    ],
   }
 }
 
@@ -196,25 +199,46 @@ export function conDocenteCreado(crudos, docente) {
   return { ...crudos, docentes: [...(crudos.docentes ?? []), docente] }
 }
 
+// Los horarios no se tocan al editar a alguien: el nombre que muestra cada clase se
+// arma en `derivarHorarios` a partir de esta misma lista, así que cambiarlo acá
+// alcanza para que cambie en todas sus clases.
 export function conDocenteEditado(crudos, id, cambios) {
-  const docentes = (crudos.docentes ?? []).map((d) => (d.id === id ? { ...d, ...cambios } : d))
-  const actualizado = docentes.find((d) => d.id === id)
   return {
     ...crudos,
-    docentes,
-    horarios: crudos.horarios.map((h) =>
-      h.docenteId === id ? { ...h, profe: actualizado?.nombre ?? h.profe } : h,
-    ),
+    docentes: (crudos.docentes ?? []).map((d) => (d.id === id ? { ...d, ...cambios } : d)),
   }
 }
 
+/** Sale del padrón de docentes y de todas las clases donde estaba. Las clases que
+ *  quedaban solo a su cargo pasan a "sin docente"; las que comparte con otra
+ *  persona siguen a cargo de quien queda. */
 export function conDocenteEliminado(crudos, id) {
   return {
     ...crudos,
     docentes: (crudos.docentes ?? []).filter((d) => d.id !== id),
     horarios: crudos.horarios.map((h) =>
-      h.docenteId === id ? { ...h, docenteId: null, profe: '' } : h,
+      (h.docenteIds ?? []).includes(id)
+        ? { ...h, docenteIds: h.docenteIds.filter((d) => d !== id) }
+        : h,
     ),
+  }
+}
+
+/** Suma o saca a una docente de una clase sin pisar al resto del equipo. Es lo que
+ *  usa el panel de Docentes: dos profes y una suplente en el mismo horario conviven,
+ *  asignar a alguien nuevo ya no transfiere la clase. */
+export function conDocenteEnClase(crudos, claseId, docenteId, incluir) {
+  return {
+    ...crudos,
+    horarios: crudos.horarios.map((h) => {
+      if (h.id !== claseId) return h
+      const actuales = h.docenteIds ?? []
+      if (incluir === actuales.includes(docenteId)) return h
+      return {
+        ...h,
+        docenteIds: incluir ? [...actuales, docenteId] : actuales.filter((d) => d !== docenteId),
+      }
+    }),
   }
 }
 
@@ -369,6 +393,16 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
           (prev) => conClaseEliminada(prev, id),
           () => db.eliminarClase(id),
         ),
+      // Suma o saca a una sola docente. La lista completa se lee del estado YA
+      // mutado: es la única que contempla al resto del equipo, que no se toca.
+      cambiarDocenteDeClase: (claseId, docenteId, incluir) =>
+        aplicar(
+          (prev) => conDocenteEnClase(prev, claseId, docenteId, incluir),
+          (nuevo) =>
+            db.editarClase(claseId, {
+              docenteIds: nuevo.horarios.find((h) => h.id === claseId)?.docenteIds ?? [],
+            }),
+        ),
       marcarAsistencia: (claseId, fechaISO, clienteId, presente) =>
         aplicar(
           (prev) => conAsistenciaMarcada(prev, claseId, fechaISO, clienteId, presente),
@@ -424,7 +458,7 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
     const docentesPorId = new Map(docentesCrudos.map((d) => [d.id, d]))
     const horarios = derivarHorarios(crudos.horarios, porId, docentesPorId)
     const docentes = docentesCrudos
-      .map((d) => ({ ...d, clases: horarios.filter((h) => h.docenteId === d.id) }))
+      .map((d) => ({ ...d, clases: horarios.filter((h) => h.docenteIds.includes(d.id)) }))
       .sort((a, b) => a.rol.localeCompare(b.rol) || a.nombre.localeCompare(b.nombre, 'es'))
     const listaEspera = (crudos.listaEspera ?? [])
       .map((p) => ({ ...p, clase: horarios.find((h) => h.id === p.claseId) ?? null }))

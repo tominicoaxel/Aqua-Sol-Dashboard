@@ -8,13 +8,17 @@ const DIAS = [1, 2, 3, 4, 5, 6]
 
 /** Alta y edición de una clase. Es el mismo formulario para las dos cosas: los
  *  campos son idénticos y tener dos versiones sería tener dos lugares donde
- *  arreglar el mismo bug. */
+ *  arreglar el mismo bug.
+ *
+ *  Los docentes van en casillas y no en un `<select multiple>`: en el celular el
+ *  select múltiple pide un gesto que nadie descubre solo, y acá marcar dos o tres
+ *  es lo habitual. */
 export default function FormularioClase({ clase, anotados = 0, titulo, onConfirmar, onCancelar }) {
   const { docentes } = useDatos()
   const [actividad, setActividad] = useState(clase?.actividad ?? '')
   const [dia, setDia] = useState(clase?.dia ?? 1)
   const [hora, setHora] = useState(clase?.hora ?? '09:00')
-  const [docenteId, setDocenteId] = useState(clase?.docenteId ?? '')
+  const [docenteIds, setDocenteIds] = useState(clase?.docenteIds ?? [])
   const [cupo, setCupo] = useState(String(clase?.cupo ?? 8))
   const [duracion, setDuracion] = useState(String(clase?.duracion ?? 45))
   const [tocado, setTocado] = useState(false)
@@ -23,7 +27,7 @@ export default function FormularioClase({ clase, anotados = 0, titulo, onConfirm
   const errorHora = /^\d{2}:\d{2}$/.test(hora) ? null : 'Elegí una hora.'
   const errorCupo = Number(cupo) >= 1 ? null : 'El cupo tiene que ser al menos 1.'
   const errorDuracion = Number(duracion) >= 5 ? null : 'La duración tiene que ser de 5 minutos o más.'
-  const errorDocente = docenteId ? null : 'Elegí quién queda a cargo.'
+  const errorDocente = docenteIds.length ? null : 'Elegí quién queda a cargo.'
   const invalido = Boolean(errorActividad || errorHora || errorCupo || errorDuracion || errorDocente)
 
   // Bajar el cupo por debajo de los que ya están anotados avisa, pero no bloquea:
@@ -38,13 +42,11 @@ export default function FormularioClase({ clase, anotados = 0, titulo, onConfirm
         e.preventDefault()
         setTocado(true)
         if (invalido) return
-        const docente = docentes.find((d) => d.id === docenteId)
         onConfirmar({
           actividad: actividad.trim(),
           dia: Number(dia),
           hora,
-          docenteId,
-          profe: docente?.nombre ?? '',
+          docenteIds,
           cupo: Number(cupo),
           duracion: Number(duracion),
         })
@@ -123,27 +125,54 @@ export default function FormularioClase({ clase, anotados = 0, titulo, onConfirm
         </Campo>
       </div>
 
-      <Campo
-        etiqueta="Docente a cargo *"
-        ayuda={docentes.length === 0 ? 'Primero cargá un docente desde la sección Docentes.' : null}
-        error={tocado ? errorDocente : null}
-        className="mt-3"
-      >
-        {(p) => (
-          <select
-            {...p}
-            value={docenteId}
-            onChange={(e) => setDocenteId(e.target.value)}
-          >
-            <option value="">Sin asignar</option>
-            {docentes.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.nombre} — {d.rol === 'suplente' ? 'Suplente' : 'Titular'}
-              </option>
-            ))}
-          </select>
+      <fieldset className="mt-3">
+        <legend className="block text-xs font-medium text-tinta-2">Docentes a cargo *</legend>
+        {docentes.length === 0 ? (
+          <p className="mt-1 text-[11px] text-tinta-3">
+            Primero cargá un docente desde la sección Docentes.
+          </p>
+        ) : (
+          <>
+            <ul className="mt-1 divide-y divide-borde-suave overflow-hidden rounded-xl border border-borde bg-white">
+              {docentes.map((d) => (
+                <li key={d.id}>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm text-tinta">
+                    <input
+                      type="checkbox"
+                      className="size-4 shrink-0 accent-cloro"
+                      checked={docenteIds.includes(d.id)}
+                      onChange={(e) => {
+                        setTocado(true)
+                        setDocenteIds((previos) =>
+                          e.target.checked
+                            ? [...previos, d.id]
+                            : previos.filter((id) => id !== d.id),
+                        )
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{d.nombre}</span>
+                    <span className="shrink-0 text-[11px] text-tinta-3">
+                      {d.rol === 'suplente' ? 'Suplente' : 'Titular'}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-[11px] text-tinta-3">
+              Podés marcar más de una: la clase queda a cargo de todas.
+            </p>
+          </>
         )}
-      </Campo>
+        {tocado && errorDocente && (
+          <p role="alert" className="mt-1 flex items-start gap-1 text-[11px] text-error-tinta">
+            <svg viewBox="0 0 16 16" className="mt-px size-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="8" cy="8" r="6.2" />
+              <path d="M8 5v3.6M8 11h.01" />
+            </svg>
+            {errorDocente}
+          </p>
+        )}
+      </fieldset>
 
       {quedanAfuera > 0 && (
         <p role="alert" className="mt-3 flex items-start gap-2 rounded-xl bg-alerta/12 px-3 py-2.5 text-[11px] leading-relaxed text-alerta-tinta ring-1 ring-alerta/25">
