@@ -115,6 +115,17 @@ export function crearPersistencia(usuarioId) {
       .then(oExplota)
   }
 
+  // ── Baja de un cliente ───────────────────────────────────────────────────
+  /** Se lleva por cascada sus pagos, su lugar en cada clase y sus asistencias:
+   *  está definido en las claves foráneas de la migración inicial. Borrarlas acá
+   *  a mano sería una segunda definición de la misma regla, que puede divergir.
+   *
+   *  Es la única baja del padrón que existe — el importador nunca borra — así que
+   *  la confirmación vive en la ficha y para cuando se llega acá ya está tomada. */
+  async function eliminarCliente(id) {
+    await supabase.from('clientes').delete().eq('id', id).then(oExplota)
+  }
+
   // ── Participantes ────────────────────────────────────────────────────────
   /** `upsert` y no `insert`: si el optimismo de la pantalla se adelantó y la fila
    *  ya estaba, agregar de nuevo tiene que ser inofensivo, no un error. */
@@ -275,6 +286,7 @@ export function crearPersistencia(usuarioId) {
     registrarPago,
     editarPago,
     editarFechas,
+    eliminarCliente,
     agregarParticipante,
     sacarParticipante,
     crearClase,

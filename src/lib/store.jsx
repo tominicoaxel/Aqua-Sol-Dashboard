@@ -232,6 +232,43 @@ export function conClientesReemplazados(crudos, clientes) {
   return { ...crudos, clientes }
 }
 
+/** Saca a una persona del padrón por completo.
+ *
+ *  Es la única operación de la app que borra a alguien, y por eso borra TODO lo
+ *  suyo de una sola vez: su ficha, su lugar en cada clase y las asistencias que
+ *  tenía marcadas. Dejar cualquiera de esas puntas colgando sería peor que no
+ *  borrar — un participante apuntando a un cliente que no existe rompe el cruce
+ *  que sostienen `derivarHorarios` y la verificación de integridad.
+ *
+ *  Acá manda la base: `participantes`, `pagos` y `asistencias` caen por cascada
+ *  al borrar la fila de `clientes`, así que la pantalla tiene que quedar igual a
+ *  lo que quedaría al recargar. El historial de pagos se va con la persona: vive
+ *  dentro de su ficha, no hay a quién dejárselo.
+ *
+ *  Lo que NO se toca es la lista de espera: quien pidió un lugar nunca fue un
+ *  cliente, es otra tabla y otra historia. */
+export function conClienteEliminado(crudos, id) {
+  // Igual que al desmarcar la última asistencia de una fecha, la fecha puede
+  // quedar con la lista vacía: vacía y ausente significan lo mismo — nadie vino.
+  const asistencias = {}
+  for (const [claseId, porFecha] of Object.entries(crudos.asistencias ?? {})) {
+    asistencias[claseId] = Object.fromEntries(
+      Object.entries(porFecha).map(([fecha, ids]) => [fecha, ids.filter((c) => c !== id)]),
+    )
+  }
+
+  return {
+    ...crudos,
+    clientes: crudos.clientes.filter((c) => c.id !== id),
+    horarios: crudos.horarios.map((h) =>
+      h.participantes.includes(id)
+        ? { ...h, participantes: h.participantes.filter((p) => p !== id) }
+        : h,
+    ),
+    asistencias,
+  }
+}
+
 export function conDocenteCreado(crudos, docente) {
   return { ...crudos, docentes: [...(crudos.docentes ?? []), docente] }
 }
@@ -468,6 +505,11 @@ export function ProveedorDatos({ children, datosIniciales = null }) {
         aplicar(
           (prev) => conClientesReemplazados(prev, clientes),
           () => db.guardarClientes(clientes),
+        ),
+      eliminarCliente: (id) =>
+        aplicar(
+          (prev) => conClienteEliminado(prev, id),
+          () => db.eliminarCliente(id),
         ),
       crearDocente: (datos) => {
         const docente = { id: nuevoId(), ...datos }

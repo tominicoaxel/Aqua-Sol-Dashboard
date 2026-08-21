@@ -289,15 +289,18 @@ function FormularioFechas({ cliente, onConfirmar, onCancelar }) {
 }
 
 export default function ClienteFicha({ clienteId, onCerrar, onAbrirClase }) {
-  const { clientePorId, horarios, registrarPago, editarPago, editarFechas, avisar } = useDatos()
+  const { clientePorId, horarios, registrarPago, editarPago, editarFechas, eliminarCliente, avisar } =
+    useDatos()
   const [modo, setModo] = useState(null)
   const [pagoEditandoId, setPagoEditandoId] = useState(null)
+  const [dandoDeBaja, setDandoDeBaja] = useState(false)
 
   // Cambiar de cliente cierra cualquier formulario que hubiera quedado abierto, para
   // no registrarle a alguien un pago que se estaba escribiendo para otra persona.
   useEffect(() => {
     setModo(null)
     setPagoEditandoId(null)
+    setDandoDeBaja(false)
   }, [clienteId])
 
   const cliente = clienteId ? clientePorId(clienteId) : null
@@ -316,6 +319,15 @@ export default function ClienteFicha({ clienteId, onCerrar, onAbrirClase }) {
     editarFechas(cliente.id, datos)
     setModo(null)
     avisar(`Actualizaste las fechas de ${cliente.nombre}.`)
+  }
+
+  const confirmarBaja = () => {
+    const nombre = cliente.nombre
+    eliminarCliente(cliente.id)
+    // Se cierra la hoja porque la ficha que estaba mirando ya no existe. Si la
+    // escritura falla, el store revierte y avisa con la opción de reintentar.
+    onCerrar()
+    avisar(`Eliminaste a ${nombre} del padrón.`)
   }
 
   const pagoEditando = cliente.historial.find((p) => p.id === pagoEditandoId) ?? null
@@ -485,6 +497,56 @@ export default function ClienteFicha({ clienteId, onCerrar, onAbrirClase }) {
             </tbody>
           </table>
         </div>
+      </Seccion>
+
+      <Seccion titulo="Dar de baja">
+        {dandoDeBaja ? (
+          <div role="alert" className="anim-subir rounded-2xl bg-error/10 p-4 ring-1 ring-error/25">
+            <p className="font-titulo text-sm font-semibold text-tinta">
+              ¿Eliminar a {cliente.nombre} del padrón?
+            </p>
+            <ul className="mt-2 space-y-1 text-xs leading-relaxed text-error-tinta">
+              <li>
+                Se borra su ficha y{' '}
+                {cliente.historial.length === 1
+                  ? 'el pago que tiene registrado'
+                  : `sus ${cliente.historial.length} pagos registrados`}
+                .
+              </li>
+              <li>
+                {clases.length === 0
+                  ? 'No está anotada en ninguna clase.'
+                  : `Sale de ${clases.length === 1 ? 'la clase' : `las ${clases.length} clases`} en las que estaba anotada, y de las asistencias que tenía marcadas.`}
+              </li>
+              <li>No se puede deshacer.</li>
+            </ul>
+            <p className="mt-2 text-xs leading-relaxed text-tinta-3">
+              Si querés conservar el historial, descargá antes la planilla del mes desde Inicio.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Boton variante="peligro" onClick={confirmarBaja}>
+                Sí, eliminar
+              </Boton>
+              <Boton variante="secundario" onClick={() => setDandoDeBaja(false)}>
+                Cancelar
+              </Boton>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-borde bg-white p-4">
+            <p className="text-xs leading-relaxed text-tinta-3">
+              Eliminar borra a la persona y todo su historial de pagos. Si solo dejó de venir a un
+              horario, sacala de ese grupo desde el detalle de la clase: así conserva su ficha.
+            </p>
+            <Boton
+              variante="fantasma"
+              className="mt-3 px-3 text-error-tinta"
+              onClick={() => setDandoDeBaja(true)}
+            >
+              Eliminar cliente
+            </Boton>
+          </div>
+        )}
       </Seccion>
     </Hoja>
   )

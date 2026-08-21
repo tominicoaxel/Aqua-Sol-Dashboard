@@ -262,7 +262,27 @@ try {
       ok(final.horarios.length === 0, 'la clase se fue')
       ok(Object.keys(final.asistencias).length === 0, 'y se llevó sus asistencias: no quedan huérfanas')
     }
-    console.log('\n── 6. Las tres planillas de ejemplos/, contra la base real ──')
+    console.log('\n── 6. Baja de un cliente: se va con todo lo suyo ────────────')
+    {
+      const antes = soloDelEnsayo(await db.cargarTodo())
+      const conHistorial = antes.clientes.find((c) => c.id === ID_A)
+      ok(conHistorial.historialPagos.length > 0, `el que se va llega con ${conHistorial.historialPagos.length} pago(s) en su historial`)
+
+      // La misma función pura de la pantalla y la misma escritura de la app.
+      local = store.conClienteEliminado(local, ID_A)
+      await db.eliminarCliente(ID_A)
+
+      const tras = soloDelEnsayo(await db.cargarTodo())
+      ok(!tras.clientes.some((c) => c.id === ID_A), 'la base ya no lo tiene')
+      ok(!local.clientes.some((c) => c.id === ID_A), 'y la pantalla tampoco: las dos puntas dicen lo mismo')
+      ok(tras.clientes.some((c) => c.id === ID_B), 'el otro cliente sigue donde estaba')
+
+      const { count: pagosTras } = await supabase
+        .from('pagos').select('*', { count: 'exact', head: true }).eq('cliente_id', ID_A)
+      ok(pagosTras === 0, 'sus pagos se fueron con la ficha, por cascada')
+    }
+
+    console.log('\n── 7. Las tres planillas de ejemplos/, contra la base real ──')
     {
       // Este bloque escribe clientes de verdad. Si la base ya tiene padrón cargado
       // se saltea: un upsert por nombre podría pisarle una fila real a la dueña, y

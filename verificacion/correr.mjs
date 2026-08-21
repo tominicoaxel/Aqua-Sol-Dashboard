@@ -534,6 +534,54 @@ try {
     ok(!ensayo.listaEspera.some((p) => p.id === persona.id), 'se puede quitar a alguien de la lista')
   }
 
+  console.log('\n── 18. Baja de un cliente ───────────────────────────────────')
+  {
+    const antes = m.derivar(datos)
+    // Alguien anotado en más de una clase: es justo el caso que puede dejar
+    // participantes apuntando a un cliente que ya no existe si la baja se hace a
+    // medias, y lo que sostiene el cruce entre las dos pantallas.
+    const quienSeVa = antes.clientes.find(
+      (c) => m.horariosDeCliente(antes.horarios, c.id).length >= 2,
+    )
+    const susClases = m.horariosDeCliente(antes.horarios, quienSeVa.id)
+    const clase = susClases[0]
+    const acompaña = clase.participantes.find((id) => id !== quienSeVa.id)
+    const FECHA_BAJA = '2026-08-10'
+
+    // Los dos vinieron el mismo día: sacar al que se va no puede llevarse la marca
+    // del que se queda.
+    let ensayo = m.conAsistenciaMarcada(datos, clase.id, FECHA_BAJA, quienSeVa.id, true)
+    ensayo = m.conAsistenciaMarcada(ensayo, clase.id, FECHA_BAJA, acompaña, true)
+    ensayo = m.conClienteEliminado(ensayo, quienSeVa.id)
+
+    const d = integridad(ensayo, 'tras dar de baja al cliente')
+    const presentes = ensayo.asistencias[clase.id]?.[FECHA_BAJA] ?? []
+
+    ok(!d.clientes.some((c) => c.id === quienSeVa.id), `${quienSeVa.nombre} ya no está en el padrón`)
+    ok(
+      d.clientes.length === antes.clientes.length - 1,
+      `el padrón pasó de ${antes.clientes.length} a ${d.clientes.length} personas`,
+    )
+    ok(
+      d.horarios.every((h) => !h.participantes.includes(quienSeVa.id)),
+      `sale de las ${susClases.length} clases en las que estaba anotado`,
+    )
+    ok(
+      susClases.every((h) => d.horarios.find((x) => x.id === h.id).ocupados === h.ocupados - 1),
+      'y el cupo ocupado de cada una de esas clases baja en uno',
+    )
+    ok(!presentes.includes(quienSeVa.id), 'las asistencias que tenía marcadas se van con él')
+    ok(presentes.includes(acompaña), 'pero la del que se queda no se toca')
+    ok(
+      (ensayo.listaEspera ?? []).length === (datos.listaEspera ?? []).length,
+      'la lista de espera queda intacta: quien pidió un lugar nunca fue cliente',
+    )
+    ok(
+      JSON.stringify(m.conClienteEliminado(ensayo, quienSeVa.id)) === JSON.stringify(ensayo),
+      'darlo de baja de nuevo no cambia nada',
+    )
+  }
+
   console.log(`\n${fallas === 0 ? 'TODO OK' : `${fallas} FALLA(S)`}\n`)
   process.exitCode = fallas === 0 ? 0 : 1
 } catch (e) {

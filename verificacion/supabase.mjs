@@ -234,6 +234,39 @@ try {
     ok(esperaTras?.clase_id === null, 'eliminar la clase conserva a la persona en espera, pero la desasigna')
     ok(docenteTras?.id === ID_DOCENTE, 'eliminar una clase no elimina a su docente')
   }
+
+  console.log('\n── 6. Baja de un cliente: la otra cascada ───────────────────')
+  {
+    // La app borra UNA fila —la del cliente— y confía en que la base se lleve el
+    // resto. Si esa confianza no estuviera justificada quedarían pagos y
+    // asistencias apuntando a alguien que ya no existe, y la próxima carga
+    // explotaría. Esto es lo que la justifica.
+    await db.from('clases').insert({
+      id: ID_CLASE, usuario_id: usuarioId, actividad: 'Verificación baja',
+      dia: 5, hora: '10:00', duracion: 40, cupo: 4,
+    })
+    await db.from('participantes').insert({ clase_id: ID_CLASE, cliente_id: ID_CLIENTE_A })
+    await db.from('asistencias').insert({ clase_id: ID_CLASE, fecha: FECHA_ASISTENCIA, cliente_id: ID_CLIENTE_A })
+
+    const contar = async (tabla, columna, valor) => {
+      const { count } = await db.from(tabla).select('*', { count: 'exact', head: true }).eq(columna, valor)
+      return count
+    }
+
+    const pagosAntes = await contar('pagos', 'cliente_id', ID_CLIENTE_A)
+    ok(pagosAntes === 2, `el cliente llega a la baja con sus 2 pagos (tiene ${pagosAntes})`)
+
+    const { error: errorBaja } = await db.from('clientes').delete().eq('id', ID_CLIENTE_A)
+    ok(!errorBaja, `eliminar un cliente propio está permitido${errorBaja ? ` (${errorBaja.message})` : ''}`)
+
+    const { data: fichaTras } = await db.from('clientes').select('id').eq('id', ID_CLIENTE_A).maybeSingle()
+    const { data: claseTras } = await db.from('clases').select('id').eq('id', ID_CLASE).maybeSingle()
+    ok(!fichaTras, 'la ficha desaparece del padrón')
+    ok(await contar('pagos', 'cliente_id', ID_CLIENTE_A) === 0, 'y se lleva su historial de pagos')
+    ok(await contar('participantes', 'cliente_id', ID_CLIENTE_A) === 0, 'y su lugar en las clases donde estaba anotado')
+    ok(await contar('asistencias', 'cliente_id', ID_CLIENTE_A) === 0, 'y las asistencias que tenía marcadas: no quedan huérfanas')
+    ok(claseTras?.id === ID_CLASE, 'pero la clase sigue en pie: se fue la persona, no el horario')
+  }
 } finally {
   await limpiar()
   await db.auth.signOut()
