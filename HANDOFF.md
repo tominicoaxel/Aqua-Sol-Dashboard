@@ -87,8 +87,11 @@ src/
                          cupo, y el cruce clientes <-> horarios.
     importer.js          Planillas: leerArchivo / sugerirMapeo / interpretarFilas /
                          aplicarClientes. Genérico a propósito.
+    exportar.js          La planilla del mes: datosDelMes() es pura y arma las 7
+                         hojas; descargarMesExcel() es la única que toca SheetJS.
     pagos.js             Métodos, las 6 cuentas, cobradoDelMes().
     estados.js           Regla al día / por vencer / vencido + sus colores.
+    listaEspera.js       Los 4 estados de un pedido de lugar + sus colores.
     fechas.js            Parseo y formato de fechas.
   components/            15 componentes, uno por archivo.
   App.jsx                Navegación entre las 3 vistas.
@@ -160,6 +163,27 @@ Dos reglas que hay tests para que no se rompan: sacar a alguien del grupo **no**
 borra las clases a las que ya vino (es un hecho pasado), pero eliminar la clase
 **sí** se lleva su asistencia (no queda huérfana).
 
+### Eliminar un cliente es la única baja, y se lleva todo
+El importador agrega y actualiza y NUNCA borra; la única forma de sacar a alguien
+del padrón es la confirmación de dos pasos al final de su ficha. Se lleva su ficha,
+sus pagos, su lugar en cada clase y sus asistencias, porque un participante
+apuntando a un cliente que no existe rompe el cruce entre las dos pantallas. La
+app borra una sola fila y el resto lo hacen las cascadas de la migración inicial:
+`conClienteEliminado` replica en la pantalla exactamente eso.
+
+Sacar a alguien de una clase NO lo borra del padrón — eso sigue viviendo en el
+detalle de la clase, y la ficha lo dice para que nadie use la baja por error.
+
+### La planilla del mes: hechos del mes, padrón de hoy
+Pagos, asistencias y clases dadas se cortan por el mes elegido. Clientes, cuotas,
+horarios y docentes van como están HOY: la base no guarda versiones anteriores de
+una ficha, así que escribir "el plan que tenía en marzo" sería inventarlo. La hoja
+de Resumen lo dice con todas las letras.
+
+Los importes viajan como número con formato de moneda y las fechas como fecha de
+Excel. Un "$42.000" de texto no se suma ni se ordena, y eso es exactamente para lo
+que se baja la planilla.
+
 ### Cupo lleno avisa pero no bloquea
 Vale para agregar participantes a una clase llena y para bajar el cupo por debajo de
 los anotados. Quién entra lo decide ella, no el sistema.
@@ -227,7 +251,8 @@ Decilo cuando corresponda en vez de afirmar que se ve bien.
 
 ## 7. Cómo se verifica
 
-`npm run verificar` corre dos scripts:
+`npm run verificar` corre cinco scripts (los dos de la base se saltean solos sin
+credenciales):
 
 **`verificacion/correr.mjs`** (13 secciones) — levanta Vite en modo SSR, renderiza
 App, el importador, las 20 fichas y los 23 detalles de clase; después aplica cada
@@ -237,6 +262,11 @@ lista real, el cruce visible en las dos puntas, ida y vuelta por localStorage.
 
 **`verificacion/importador.mjs`** — genera las 3 planillas en `ejemplos/` y pasa el
 pipeline completo, más 4 archivos que no son planillas.
+
+**`verificacion/exportador.mjs`** — la planilla del mes contra un padrón inventado a
+mano (las fechas de la semilla son relativas a hoy y acá hace falta saber de qué mes
+es cada pago): que el corte por mes deje afuera lo que no es del mes, y que el
+.xlsx, leído de vuelta, traiga los importes como números y las fechas como fechas.
 
 **Al agregar una feature, agregarle su sección acá.** Es el único test que hay.
 
@@ -270,10 +300,11 @@ Ninguna está confirmada. Se asumió y se dejó fácil de cambiar:
   `aplicarPagos()`. **Reusar, no reescribir.**
 - Importar horarios (mismo mecanismo).
 - Alta de cliente nuevo desde cero, a mano.
-- Backend / base de datos real.
-- Exportar a Excel.
-- Borrar un cliente por completo.
-- Login, recordatorios por WhatsApp/mail.
+- Recordatorios por WhatsApp/mail.
+- Importar pagos históricos junto con el padrón.
+
+Ya no están fuera de alcance —se hicieron después de escribir esto—: backend real
+(Supabase), login, exportar a Excel y borrar un cliente por completo.
 
 ---
 

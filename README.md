@@ -1,8 +1,8 @@
 # Dashboard Pileta
 
 Panel de gestión para una pileta privada. Permite administrar clientes, cuotas,
-clases, docentes titulares y suplentes, lista de espera y asistencias, e importar
-el padrón desde Excel o CSV.
+clases, docentes titulares y suplentes, lista de espera y asistencias, importar el
+padrón desde Excel o CSV y descargar los datos de un mes en una planilla de Excel.
 
 Los datos viven en **Supabase** (Postgres + Auth) y están protegidos con RLS. La
 aplicación requiere iniciar sesión y no ofrece registro público.
@@ -78,13 +78,14 @@ npm run build                # build de producción en dist/
 npm run verificar            # todos los chequeos, incluida la base real
 npm run verificar:base       # esquema, RLS y persistencia en Supabase
 npm run verificar:importador # importador y regeneración de ejemplos/
+npm run verificar:exportador # la planilla del mes
 npm run preview              # vista local del build
 ```
 
 `npm run verificar` comprueba el render SSR de todas las pantallas, las
-mutaciones puras, el importador, el esquema y las políticas RLS, y el ciclo de
-persistencia contra Supabase. Si faltan credenciales, los bloques que requieren
-la base se omiten con un aviso explícito.
+mutaciones puras, el importador, la planilla del mes, el esquema y las políticas
+RLS, y el ciclo de persistencia contra Supabase. Si faltan credenciales, los
+bloques que requieren la base se omiten con un aviso explícito.
 
 ## Importar desde Excel
 
@@ -96,6 +97,32 @@ La importación agrega y actualiza por nombre normalizado, pero **nunca borra**.
 Las filas problemáticas se informan para que ninguna persona desaparezca en
 silencio. En `ejemplos/` hay tres archivos de prueba.
 
+## Descargar un mes en Excel
+
+En **Inicio**, abajo de los cobros del mes, se elige un mes y se baja un archivo
+`.xlsx` con siete hojas: resumen, pagos, clientes, clases dadas, asistencias,
+docentes y lista de espera. Antes de descargar, la pantalla dice cuántos pagos,
+cuánto dinero y cuántas clases van adentro.
+
+La lista ofrece los meses que tienen algo cargado, más el mes en curso. Los
+importes salen como números con formato de moneda y las fechas como fechas de
+Excel, así que se pueden sumar, ordenar y filtrar.
+
+Lo que hay que saber para leerla: **los pagos, las asistencias y las clases dadas
+son del mes elegido, pero el padrón, los horarios, las cuotas y los docentes van
+como están hoy**. La aplicación guarda el estado actual de cada ficha, no sus
+versiones anteriores. La hoja de resumen lo aclara en el propio archivo.
+
+## Eliminar un cliente
+
+Al final de la ficha de cada persona, en **Dar de baja**. Pide confirmación y
+enumera antes qué se borra: la ficha, su historial de pagos, su lugar en cada
+clase y las asistencias que tenía marcadas. No se puede deshacer.
+
+Es la única operación que borra a alguien: el importador agrega y actualiza, nunca
+elimina. Si una persona solo dejó de venir a un horario, conviene sacarla de ese
+grupo desde el detalle de la clase — así conserva su ficha y su historial.
+
 ## Persistencia y seguridad
 
 - Cada usuaria accede únicamente a sus filas mediante políticas RLS.
@@ -106,6 +133,8 @@ silencio. En `ejemplos/` hay tres archivos de prueba.
 - La lista de espera conserva la persona aunque se elimine el horario solicitado.
 - Los pagos del historial se pueden corregir sin duplicar el asiento; si es el
   último, también se sincronizan las fechas principales de la cuota.
+- Eliminar un cliente borra por cascada sus pagos, sus asistencias y su lugar en
+  cada clase; las clases quedan intactas.
 - El estado se actualiza de forma optimista y se revierte si falla la escritura.
 - El registro público permanece cerrado; no hay formulario de alta en la app.
 - Nunca se debe usar ni versionar una clave `service_role`.

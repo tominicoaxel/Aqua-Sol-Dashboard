@@ -123,6 +123,44 @@ para no pisarle una fila a la dueña con un upsert por nombre.
 
 ---
 
+### Baja de clientes y planilla del mes ✅
+
+Las dos cosas que figuraban como fuera de alcance en `HANDOFF.md` y que la clienta
+pidió después.
+
+**Eliminar un cliente.** Es la única baja del padrón que existe: el importador
+agrega y actualiza, nunca borra. Vive al final de la ficha, en "Dar de baja", con
+confirmación en dos pasos que enumera qué se lleva puesto (la ficha, sus pagos, su
+lugar en cada clase y sus asistencias). La app borra **una** fila —la de
+`clientes`— y el resto cae por las cascadas que ya estaban en la migración
+inicial; `conClienteEliminado` deja la pantalla igual a lo que devolvería una
+recarga. Lo que NO toca es la lista de espera: quien pidió un lugar nunca fue
+cliente.
+
+**Descargar un mes en Excel.** En Inicio, abajo de "Cobros del mes". Un selector
+con los meses que tienen algo (más el mes en curso, siempre) y un botón que baja un
+`.xlsx` con siete hojas: Resumen, Pagos, Clientes, Clases dadas, Asistencias,
+Docentes y Lista de espera. Antes de bajar nada se dice cuántos pagos, cuánto y
+cuántas clases van adentro.
+
+Dos decisiones que no se deducen del código:
+
+- **Los hechos son del mes; el padrón es de hoy.** Pagos, asistencias y clases
+  dadas se cortan por el mes elegido. Clientes, cuotas, horarios y docentes van
+  como están hoy, porque la base guarda el estado actual de cada ficha y no sus
+  versiones anteriores. La planilla lo dice en su hoja de Resumen en vez de dejarlo
+  a la interpretación.
+- **Los importes van como número con formato de moneda, no como texto.** Un
+  "$42.000" de texto no se suma ni se ordena, y sumar una columna es lo primero que
+  se hace con esta planilla. Las fechas, igual: fecha de Excel con formato
+  `dd/mm/yyyy`.
+
+El cálculo entero (`src/lib/exportar.js`) es puro y no toca SheetJS: la única
+función que lo importa es `descargarMesExcel`, y lo hace con `import()` dinámico
+para que los 512 kB de la biblioteca no entren al bundle de Inicio.
+
+---
+
 ## 2. Lo que falta
 
 ### Fase 5 — Limpieza y despliegue ⬜
@@ -188,18 +226,20 @@ abajo**, en la zona del pulgar.
 ```bash
 npm run dev                  # http://localhost:5173
 npm run build
-npm run verificar            # 233 chequeos: los 4 scripts
+npm run verificar            # los 5 scripts (294 chequeos sin contar la base)
 npm run verificar:base       # solo lo que toca Supabase
 npm run verificar:importador # solo el importador; regenera ejemplos/
+npm run verificar:exportador # solo la planilla del mes
 ```
 
-`npm run verificar` corre cuatro scripts:
+`npm run verificar` corre cinco scripts:
 
 | Script | Qué prueba |
 |---|---|
-| `verificacion/correr.mjs` | 14 secciones: render SSR de todas las pantallas + las mutaciones puras + la puerta |
+| `verificacion/correr.mjs` | 18 secciones: render SSR de todas las pantallas + las mutaciones puras + la puerta + la baja de un cliente |
 | `verificacion/importador.mjs` | El pipeline de planillas, sin red |
-| `verificacion/supabase.mjs` | Esquema y RLS contra la base real |
+| `verificacion/exportador.mjs` | La planilla del mes: el corte por mes y el .xlsx leído de vuelta |
+| `verificacion/supabase.mjs` | Esquema y RLS contra la base real, incluidas las dos cascadas |
 | `verificacion/persistencia.mjs` | El ciclo completo con el código real, y las 3 planillas contra la base |
 
 **Los dos últimos se saltean solos** si faltan credenciales en `.env.local`, y lo
