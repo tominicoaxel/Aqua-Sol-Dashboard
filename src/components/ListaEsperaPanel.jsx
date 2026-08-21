@@ -1,16 +1,10 @@
 import { useState } from 'react'
 import { GRUPOS_EDAD_ESPERA, grupoEdadEspera } from '../lib/edades.js'
+import { ESTADOS_ESPERA } from '../lib/listaEspera.js'
 import { formatoFecha, nombreDia, parseISO } from '../lib/fechas.js'
 import { isoDeHoy, useDatos } from '../lib/store.jsx'
 import Boton from './Boton.jsx'
 import Campo from './Campo.jsx'
-
-export const ESTADOS_ESPERA = {
-  esperando: { etiqueta: 'Esperando', clase: 'bg-sol/15 text-sol-tinta ring-sol/30' },
-  contactado: { etiqueta: 'Contactado', clase: 'bg-cloro/15 text-cloro-tinta ring-cloro/25' },
-  ingreso: { etiqueta: 'Ingresó', clase: 'bg-exito/15 text-exito-tinta ring-exito/25' },
-  baja: { etiqueta: 'Baja', clase: 'bg-error/10 text-error-tinta ring-error/20' },
-}
 
 function etiquetaClase(clase) {
   if (!clase) return 'Clase eliminada o sin asignar'

@@ -34,6 +34,11 @@ const MESES = [
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ]
 
+/** "agosto" — en minúscula, que es como se lee dentro de una oración. */
+export function nombreMes(indice) {
+  return MESES[indice]
+}
+
 export function formatoFechaLarga(fecha) {
   return `${fecha.getDate()} de ${MESES[fecha.getMonth()]} de ${fecha.getFullYear()}`
 }

@@ -1,9 +1,10 @@
 import { ESTADOS, ORDEN_ESTADOS } from '../lib/estados.js'
 import { conteoPorEstado, horariosDelDia, resumenDelDia } from '../lib/datos.js'
 import { useDatos } from '../lib/store.jsx'
-import { hoy, diaDeHoy, nombreDia, formatoFechaLarga, formatoMonto } from '../lib/fechas.js'
+import { hoy, diaDeHoy, nombreDia, nombreMes, formatoFechaLarga, formatoMonto } from '../lib/fechas.js'
 import { CUENTAS, TITULARES, cobradoDelMes } from '../lib/pagos.js'
 import BarraCupo from './BarraCupo.jsx'
+import DescargarMes from './DescargarMes.jsx'
 
 const conAlfa = (hex, alfa) => {
   const n = parseInt(hex.slice(1), 16)
@@ -81,8 +82,6 @@ function AccesoDirecto({ titulo, detalle, onClick, icono }) {
   )
 }
 
-const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-
 /** Lo cobrado en el mes, partido por destino. Es exactamente la cuenta que hoy
  *  hace a mano en el Excel a fin de mes: cuánto le entró a cada uno.
  *
@@ -111,7 +110,7 @@ function CobrosDelMes() {
     <div className="rounded-2xl border border-borde bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs text-tinta-3">Cobrado en {MESES[ahora.getMonth()]}</p>
+          <p className="text-xs text-tinta-3">Cobrado en {nombreMes(ahora.getMonth())}</p>
           <p className="dato mt-0.5 text-3xl leading-none font-bold text-agua">
             {formatoMonto(cobrado.total)}
           </p>
@@ -192,6 +191,19 @@ export default function ResumenGeneral({ onIrAClientes, onIrAHorarios, onAbrirCl
           Cobros del mes
         </h2>
         <CobrosDelMes />
+      </section>
+
+      {/* Va pegado a los cobros y no en un rincón: la descarga es el último paso
+          de la misma tarea —cerrar el mes— y es cuando ella ya está mirando el
+          número que la planilla explica. */}
+      <section aria-labelledby="t-descarga">
+        <h2 id="t-descarga" className="mb-1 font-titulo text-lg font-semibold text-tinta">
+          Descargar un mes
+        </h2>
+        <p className="mb-3 text-sm text-tinta-3">
+          Todos los datos del mes en una planilla de Excel, para guardar o mandar.
+        </p>
+        <DescargarMes />
       </section>
 
       <section aria-labelledby="t-hoy">

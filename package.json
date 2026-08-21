@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "verificar": "node verificacion/correr.mjs && node verificacion/importador.mjs && node verificacion/supabase.mjs && node verificacion/persistencia.mjs",
+    "verificar": "node verificacion/correr.mjs && node verificacion/importador.mjs && node verificacion/exportador.mjs && node verificacion/supabase.mjs && node verificacion/persistencia.mjs",
     "verificar:importador": "node verificacion/importador.mjs",
+    "verificar:exportador": "node verificacion/exportador.mjs",
     "snapshot": "vite build && node snapshot/generar.mjs",
     "verificar:base": "node verificacion/supabase.mjs && node verificacion/persistencia.mjs",
     "sembrar": "node scripts/sembrar.mjs"
